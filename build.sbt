@@ -22,7 +22,7 @@ lazy val root = (project in file("."))
       Seq(
         "com.dwolla" %% "scala-cloudformation-custom-resource" % "1.1.1" exclude ("com.dwolla", "scala-aws-utils_2.12") withSources(),
         "com.dwolla" %% "scala-aws-utils" % scalaAwsUtilsVersion withSources(),
-        "com.dwolla" %% "cloudflare-api-client" % "1.3.0" withSources(),
+        "com.dwolla" %% "cloudflare-api-client" % "2.1.0" withSources(),
         "com.amazonaws" % "aws-java-sdk-kms" % awsSdkVersion,
         "org.apache.httpcomponents" % "httpclient" % "4.5.2",
         "org.specs2" %% "specs2-core" % specs2Version % Test,
@@ -30,7 +30,8 @@ lazy val root = (project in file("."))
         "org.specs2" %% "specs2-matcher-extra" % specs2Version % Test,
         "com.dwolla" %% "testutils" % "1.9.0" % Test
       )
-    }
+    },
+    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4")
   )
   .settings(commonSettings: _*)
   .configs(IntegrationTest)
