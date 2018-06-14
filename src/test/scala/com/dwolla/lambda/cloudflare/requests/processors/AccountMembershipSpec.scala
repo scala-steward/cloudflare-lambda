@@ -5,6 +5,7 @@ import com.dwolla.cloudflare.{AccountMemberDoesNotExistException, AccountsClient
 import com.dwolla.lambda.cloudflare.Exceptions.{MissingRoles, UnsupportedAction}
 import com.dwolla.lambda.cloudformation.HandlerResponse
 import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.json4s.native.Serialization
 import org.json4s.{DefaultFormats, Formats, JValue}
 import org.slf4j.Logger
 import org.specs2.concurrent.ExecutionEnv
@@ -87,11 +88,15 @@ class AccountMembershipSpec extends Specification with Mockito {
       output must beLike[HandlerResponse] {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
-          handlerResponse.data must havePair("accountMember" → accountMember)
-          handlerResponse.data must havePair("created" → Some(accountMember))
-          handlerResponse.data must havePair("updated" → None)
-          handlerResponse.data must havePair("oldAccountMember" → None)
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
       }.await
+
+      val responseData = Map(
+        "accountMember" → accountMember,
+        "created" → Some(accountMember)
+      )
+
+      there was one (mockLogger).info(s"Cloudflare AccountMembership response data: ${Serialization.write(responseData)}")
     }
 
     "throw an exception if roles not found on Create" in new Setup {
@@ -206,11 +211,16 @@ class AccountMembershipSpec extends Specification with Mockito {
       output must beLike[HandlerResponse] {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must havePair("accountMember" → updatedAccountMember)
-          handlerResponse.data must havePair("created" → None)
-          handlerResponse.data must havePair("updated" → Some(updatedAccountMember))
-          handlerResponse.data must havePair("oldAccountMember" → Some(originalAccountMember))
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
       }.await
+
+      val responseData = Map(
+        "accountMember" → updatedAccountMember,
+        "updated" → Some(updatedAccountMember),
+        "oldAccountMember" → originalAccountMember
+      )
+
+      there was one (mockLogger).info(s"Cloudflare AccountMembership response data: ${Serialization.write(responseData)}")
     }
 
     "throw an exception if accounts don't match on Update" in new Setup {
@@ -461,7 +471,7 @@ class AccountMembershipSpec extends Specification with Mockito {
       output must beLike[HandlerResponse] {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must havePair("deletedAccountMemberId" → accountMemberId)
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
       }.await
     }
 
@@ -489,7 +499,7 @@ class AccountMembershipSpec extends Specification with Mockito {
       output must beLike[HandlerResponse] {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must not(havePair("deletedAccountMemberId" → accountMemberId))
+          handlerResponse.data must not(havePair("accountMemberId" → accountMemberId))
       }.await
 
       there was one (mockLogger).error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", ex)

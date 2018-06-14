@@ -8,6 +8,7 @@ import com.dwolla.lambda.cloudflare.Exceptions.{MissingRoles, UnsupportedAction}
 import com.dwolla.lambda.cloudflare.util.JValue._
 import com.dwolla.lambda.cloudformation.HandlerResponse
 import org.json4s.{DefaultFormats, Formats, JValue}
+import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -78,7 +79,7 @@ class AccountMembership(implicit ec: ExecutionContext) extends ResourceRequestPr
     physicalResourceId match {
       case accountMemberUriRegex(accountId, accountMemberId) ⇒
         accountsClient.removeAccountMember(accountId, accountMemberId) map { deleted ⇒
-          HandlerResponse(physicalResourceId, Map("deletedAccountMemberId" → deleted))
+          HandlerResponse(physicalResourceId, Map("accountMemberId" → deleted))
         }
       case _ ⇒
         logger.error(s"The physical resource id $physicalResourceId does not match the URL pattern for a Cloudflare account")
@@ -116,7 +117,9 @@ class AccountMembership(implicit ec: ExecutionContext) extends ResourceRequestPr
       "oldAccountMember" → existing
     )
 
-    HandlerResponse(accountMember.uri(accountId), data)
+    logger.info(s"Cloudflare AccountMembership response data: ${Serialization.write(data)}")
+
+    HandlerResponse(accountMember.uri(accountId), Map("accountMemberId" → accountMember.id))
   }
 }
 
