@@ -11,6 +11,8 @@ lazy val specs2Version = "4.2.0"
 lazy val awsSdkVersion = "1.11.323"
 lazy val scalaAwsUtilsVersion = "1.6.1"
 
+s3Key := s"lambdas/${normalizedName.value}/${version.value}/${normalizedName.value}.jar"
+
 lazy val root = (project in file("."))
   .settings(
     name := "cloudflare-lambda",
