@@ -1,75 +1,103 @@
 package com.dwolla.lambda.cloudflare.requests
 
-import com.dwolla.awssdk.kms.KmsDecrypter
-import com.dwolla.cloudflare.FutureCloudflareApiExecutor
+import cats.data.Reader
+import cats.effect.IO
+import com.dwolla.cloudflare.StreamingCloudflareApiExecutor
+import com.dwolla.fs2aws.kms._
 import com.dwolla.lambda.cloudflare.Exceptions.UnsupportedResourceType
 import com.dwolla.lambda.cloudflare.requests.processors.ResourceRequestProcessor
-import com.dwolla.lambda.cloudformation.{CloudFormationCustomResourceRequest, HandlerResponse, MissingResourceProperties}
-import org.json4s.JValue
-import org.json4s.JsonAST.JString
+import com.dwolla.lambda.cloudformation._
+import io.circe.Json
+import fs2._
+import org.http4s.HttpService
+import org.http4s.client.Client
 import org.specs2.concurrent.ExecutionEnv
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 
-import scala.concurrent.Future
-
-class ResourceRequestFactorySpec extends Specification with Mockito {
-  implicit val ee: ExecutionEnv = ExecutionEnv.fromGlobalExecutionContext
-
+class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specification with Mockito {
   trait Setup extends Scope {
-    implicit val mockCloudflareApiExecutor = mock[FutureCloudflareApiExecutor]
-    val mockKmsDecrypter = mock[KmsDecrypter]
-    val mockProcessor = mock[ResourceRequestProcessor]
+    val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
 
-    mockKmsDecrypter.decryptBase64("CloudflareEmail" → "cloudflare-account-email@dwollalabs.com", "CloudflareKey" → "fake-key") returns Future.successful(Map("CloudflareEmail" → "cloudflare-account-email@dwollalabs.com", "CloudflareKey" → "fake-key").transform((_, value) ⇒ value.getBytes("UTF-8")))
+    val mockKms = new FakeKms(Map("CloudflareEmail" → "cloudflare-account-email@dwollalabs.com", "CloudflareKey" → "fake-key").transform((_, value) ⇒ value.getBytes("UTF-8")))
 
-    val factory = new ResourceRequestFactory() {
-      override protected def cloudflareApiExecutor(email: String, key: String): Future[FutureCloudflareApiExecutor] = {
-        if (!promisedCloudflareApiExecutor.isCompleted)
-          promisedCloudflareApiExecutor.success(mockCloudflareApiExecutor)
-
-        promisedCloudflareApiExecutor.future
-      }
-
-      override protected lazy val kmsDecrypter: KmsDecrypter = mockKmsDecrypter
-
-      override protected val processors: Map[String, ResourceRequestProcessor] = Map(
-        "Custom::Tester" → mockProcessor
-      )
-    }
+    val mockClient = Client.fromHttpService(HttpService.empty[IO])
   }
 
   "process" should {
     "decrypt credentials and send request to processor" in new Setup {
       val request = buildRequest("Custom::Tester", Some(Map(
-        "CloudflareEmail" → JString("cloudflare-account-email@dwollalabs.com"),
-        "CloudflareKey" → JString("fake-key")
+        "CloudflareEmail" → Json.fromString("cloudflare-account-email@dwollalabs.com"),
+        "CloudflareKey" → Json.fromString("fake-key")
       )))
 
       val response = HandlerResponse("1")
-      mockProcessor.process(request.RequestType.toUpperCase(), request.PhysicalResourceId, request.ResourceProperties.get) returns Future.apply(response)
+      val fakeProcessor = new ResourceRequestProcessor {
+        override val executor: StreamingCloudflareApiExecutor[IO] = mockExecutor
+        override def process(action: String, physicalResourceId: Option[String], properties: Map[String, Json]): Stream[IO, HandlerResponse] =
+          if (action != request.RequestType.toUpperCase || physicalResourceId != request.PhysicalResourceId || properties != request.ResourceProperties.get)
+            Stream.raiseError(new RuntimeException(s"unexpected arguments: ($action, $physicalResourceId, $properties)"))
+          else
+            Stream.emit(response)
+      }
 
-      val output = factory.process(request)
-      output must be_==(response).await
+      val factory = new ResourceRequestFactory(Stream.emit(mockClient), Stream.emit(mockKms)) {
+        override protected val processors = Map(
+          "Custom::Tester" → Reader(_ ⇒ fakeProcessor)
+        )
+
+        override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = mockExecutor
+      }
+
+      private val output = factory.process(request)
+      output.compile.last.unsafeToFuture() must beSome(response).await
     }
 
     "throw exception if missing ResourceType" in new Setup {
       val request = buildRequest("Custom::MyType")
 
-      val output = factory.process(request)
-      output must throwA(UnsupportedResourceType(request.ResourceType)).await
+      val factory = new ResourceRequestFactory(Stream.empty, Stream.empty) {
+        override protected val processors = Map.empty
+
+        override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = {
+          mockExecutor
+        }
+      }
+
+      private val output = factory.process(request)
+
+      output.compile.last.unsafeToFuture() must throwA[UnsupportedResourceType].like {
+        case ex ⇒ ex.getMessage must_==
+          """Unsupported resource type of "Custom::MyType"."""
+      }.await
     }
 
     "throw exception if request missing ResourceProperties" in new Setup {
       val request = buildRequest("Custom::Tester")
 
-      val output = factory.process(request)
-      output must throwA(MissingResourceProperties).await
+      val fakeProcessor = new ResourceRequestProcessor {
+        override val executor: StreamingCloudflareApiExecutor[IO] = mockExecutor
+        override def process(action: String, physicalResourceId: Option[String], properties: Map[String, Json]): Stream[IO, HandlerResponse] = ???
+      }
+
+      val factory = new ResourceRequestFactory(Stream.empty, Stream.empty) {
+        override protected val processors = Map(
+          "Custom::Tester" → Reader(_ ⇒ fakeProcessor)
+        )
+
+        override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = {
+          mockExecutor
+        }
+      }
+
+      private val output = factory.process(request)
+
+      output.compile.last.unsafeToFuture() must throwA(MissingResourceProperties).await
     }
   }
 
-  private def buildRequest(resourceType: String, resourceProperties: Option[Map[String, JValue]] = None) =
+  private def buildRequest(resourceType: String, resourceProperties: Option[Map[String, Json]] = None) =
     CloudFormationCustomResourceRequest(
       RequestType = "CREATE",
       ResponseURL = "",
@@ -81,4 +109,10 @@ class ResourceRequestFactorySpec extends Specification with Mockito {
       ResourceProperties = resourceProperties,
       OldResourceProperties = None
     )
+}
+
+class FakeKms(decrypted: Map[String, Array[Byte]]) extends KmsDecrypter[IO] {
+  override def decryptBase64(cryptoTexts: (String, String)*): Stream[IO, Map[String, Array[Byte]]] = Stream.emit(decrypted)
+  override def decrypt[A](transformer: Transform[A], cryptoText: A): IO[Array[Byte]] = ???
+  override def decrypt[A](transform: Transform[A], cryptoTexts: (String, A)*): Stream[IO, Map[String, Array[Byte]]] = ???
 }

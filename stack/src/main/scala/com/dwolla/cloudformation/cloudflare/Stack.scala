@@ -1,6 +1,6 @@
 package com.dwolla.cloudformation.cloudflare
 
-import com.dwolla.lambda.cloudflare.CustomResourceHandler
+import com.dwolla.lambda.cloudflare.CloudflareHandler
 import com.monsanto.arch.cloudformation.model._
 import com.monsanto.arch.cloudformation.model.resource._
 
@@ -102,7 +102,7 @@ object Stack {
         ZipFile = None
       ),
       Description = Option("Manages settings at Cloudflare"),
-      Handler = classOf[CustomResourceHandler].getName,
+      Handler = classOf[CloudflareHandler].getName,
       Runtime = Java8,
       MemorySize = Some(512),
       Role = `Fn::GetAtt`(Seq(role.name, "Arn")),

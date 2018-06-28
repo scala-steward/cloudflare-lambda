@@ -1,19 +1,23 @@
 package com.dwolla.lambda.cloudflare
 
+import cats.data._
+import cats.effect._
+import com.dwolla.fs2aws.kms.KmsDecrypter
 import com.dwolla.lambda.cloudflare.requests.ResourceRequestFactory
-import com.dwolla.lambda.cloudformation.{CloudFormationCustomResourceRequest, HandlerResponse, ParsedCloudFormationCustomResourceRequestHandler}
+import com.dwolla.lambda.cloudformation.{CatsAbstractCustomResourceHandler, CloudFormationCustomResourceRequest, HandlerResponse}
+import fs2.Stream
+import org.http4s.client.Client
+import org.http4s.client.blaze.Http1Client
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.language.{higherKinds, implicitConversions, postfixOps, reflectiveCalls}
+import scala.concurrent.ExecutionContext.Implicits.global
 
-class CloudflareHandler(implicit ec: ExecutionContext) extends ParsedCloudFormationCustomResourceRequestHandler {
-  protected lazy val resourceRequestFactory = new ResourceRequestFactory()
+class CloudflareHandler(httpClientStream: Stream[IO, Client[IO]], kmsClientStream: Stream[IO, KmsDecrypter[IO]]) extends CatsAbstractCustomResourceHandler[IO] {
+  def this() = this(Http1Client.stream[IO](), KmsDecrypter.stream[IO]())
 
-  override def handleRequest(input: CloudFormationCustomResourceRequest): Future[HandlerResponse] = {
-    resourceRequestFactory.process(input)
-  }
+  protected lazy val resourceRequestFactory = new ResourceRequestFactory(httpClientStream, kmsClientStream)
 
-  override def shutdown(): Unit = {
-    resourceRequestFactory.shutdown()
-  }
+  override def handleRequest(req: CloudFormationCustomResourceRequest): IO[HandlerResponse] =
+    OptionT(resourceRequestFactory.process(req).compile.last)
+      .getOrElseF(IO.raiseError(new RuntimeException("no response was created by the handler")))
+
 }

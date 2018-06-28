@@ -1,28 +1,15 @@
 package com.dwolla.lambda.cloudflare
 
 import com.dwolla.lambda.cloudflare.requests.ResourceRequestFactory
-import com.dwolla.lambda.cloudformation.{CloudFormationCustomResourceRequest, HandlerResponse}
+import com.dwolla.lambda.cloudformation._
+import fs2._
 import org.specs2.concurrent.ExecutionEnv
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
-import org.specs2.specification.Scope
 
-import scala.concurrent.Future
-
-class CloudflareHandlerSpec extends Specification with Mockito {
-  implicit val ee: ExecutionEnv = ExecutionEnv.fromGlobalExecutionContext
-
-  trait Setup extends Scope {
-    val mockFactory = mock[ResourceRequestFactory]
-
-
-    val handler = new CloudflareHandler() {
-      override protected lazy val resourceRequestFactory = mockFactory
-    }
-  }
-
+class CloudflareHandlerSpec(implicit ee: ExecutionEnv) extends Specification with Mockito {
   "handleRequest" should {
-    "send to ResourceRequestFactory to process" in new Setup {
+    "send to ResourceRequestFactory to process" >> {
       val request = CloudFormationCustomResourceRequest(
         RequestType = "CREATE",
         ResponseURL = "",
@@ -36,17 +23,16 @@ class CloudflareHandlerSpec extends Specification with Mockito {
       )
 
       val response = HandlerResponse("1")
-      mockFactory.process(request) returns Future.apply(response)
+      val mockFactory = new ResourceRequestFactory(Stream.empty, Stream.empty) {
+        override def process(input: CloudFormationCustomResourceRequest) = Stream.emit(response)
+      }
 
-      handler.handleRequest(request) must be_==(response).await
-    }
-  }
+      val handler = new CloudflareHandler() {
+        override protected lazy val resourceRequestFactory = mockFactory
+      }
 
-  "shutdown" should {
-    "call shutdown on ResourceRequestFactory" in new Setup {
-      handler.shutdown()
-
-      there was one(mockFactory).shutdown()
+      val output = handler.handleRequest(request)
+      output.unsafeToFuture() must be_==(response).await
     }
   }
 }
