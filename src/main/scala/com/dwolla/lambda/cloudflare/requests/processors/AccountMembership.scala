@@ -102,6 +102,9 @@ class AccountMembership(implicit ec: ExecutionContext) extends ResourceRequestPr
   }
 
   private def findRequestedRoles(requestedRoleNames: List[String], accountRoles: Set[AccountRole]): List[AccountRole] = {
+    logger.info(s"Requested roles: $requestedRoleNames")
+    logger.info(s"Found roles for account: $accountRoles")
+
     val foundRoles = accountRoles.filter(ar ⇒ requestedRoleNames.contains(ar.name)).toList
     if (foundRoles.size != requestedRoleNames.size) throw MissingRoles(requestedRoleNames)
 
