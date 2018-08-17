@@ -1,49 +1,45 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
-import com.dwolla.cloudflare.domain.model.accounts.{AccountMember, AccountRole, AccountRolePermissions, User}
-import com.dwolla.cloudflare.{AccountMemberDoesNotExistException, AccountsClient, FutureCloudflareApiExecutor}
-import com.dwolla.lambda.cloudflare.Exceptions.{MissingRoles, UnsupportedAction}
+import cats.effect.IO
+import com.dwolla.cloudflare.domain.model.accounts._
+import com.dwolla.cloudflare._
 import com.dwolla.lambda.cloudformation.HandlerResponse
-import org.json4s.JsonAST.{JArray, JObject, JString}
-import org.json4s.native.Serialization
-import org.json4s.{DefaultFormats, Formats, JValue}
+import io.circe._
+import io.circe.syntax._
+import io.circe.generic.auto._
 import org.slf4j.Logger
-import org.specs2.concurrent.ExecutionEnv
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
+import _root_.fs2._
+import com.dwolla.lambda.cloudflare.Exceptions._
+import org.specs2.concurrent.ExecutionEnv
 
-import scala.concurrent.Future
-
-class AccountMembershipSpec extends Specification with Mockito {
-  implicit val ee: ExecutionEnv = ExecutionEnv.fromGlobalExecutionContext
-  implicit val formats: Formats = DefaultFormats ++ org.json4s.ext.JodaTimeSerializers.all
-
+class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification with Mockito {
   trait Setup extends Scope {
-    implicit val mockCloudflareApiExecutor = mock[FutureCloudflareApiExecutor]
-    val mockLogger = mock[Logger]
-    val mockAccountsClient = mock[AccountsClient[Future]]
+    val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
+    val mockLogger: Logger = mock[Logger]
 
-    val processor = new AccountMembership() {
-      override protected lazy val logger: Logger = mockLogger
-
-      override protected def cloudflareApiClient(executor: FutureCloudflareApiExecutor) = mockAccountsClient
-    }
+    def buildProcessor(fakeClient: AccountsClient[IO], log: Logger): AccountMembership =
+      new AccountMembership(mockExecutor) {
+        override protected lazy val logger: Logger = log
+        override protected lazy val accountsClient = fakeClient
+      }
   }
 
-  "process" should {
+  "process Create/Update" should {
     "handle a Create action successfully" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"))
+      val roleNames = List(Json.fromString("Fake Role 1"), Json.fromString("Fake Role 2"))
 
       val action = "CREATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.fromValues(roleNames)
         )
       )
 
@@ -71,8 +67,8 @@ class AccountMembershipSpec extends Specification with Mockito {
         id = accountMemberId,
         user = User(
           id = "fake-user-id",
-          firstName = null,
-          lastName = null,
+          firstName = None,
+          lastName = None,
           emailAddress = emailAddress,
           twoFactorEnabled = false
         ),
@@ -80,37 +76,35 @@ class AccountMembershipSpec extends Specification with Mockito {
         roles = accountRoles.toList
       )
 
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles)
-      mockAccountsClient.addMemberToAccount(accountId, emailAddress, List("1111", "2222")) returns Future.apply(accountMember)
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
 
-      val output = processor.process(action, None, resourceProperties)
+        override def addMember(accountId: String, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.emit(accountMember)
+      }
 
-      output must beLike[HandlerResponse] {
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output: Stream[IO, HandlerResponse] = processor.process(action, None, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
-          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId.asJson)
       }.await
-
-      val responseData = Map(
-        "accountMember" → accountMember,
-        "created" → Some(accountMember)
-      )
-
-      there was one (mockLogger).info(s"Cloudflare AccountMembership response data: ${Serialization.write(responseData)}")
     }
 
     "throw an exception if roles not found on Create" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"))
+      val roleNames = List("Fake Role 1", "Fake Role 2")
 
       val action = "CREATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -125,26 +119,30 @@ class AccountMembershipSpec extends Specification with Mockito {
         )
       )
 
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles)
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
+      }
 
-      val output = processor.process(action, None, resourceProperties)
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
 
-      output must throwA(MissingRoles(roleNames.map(_.extract[String]))).await
+      private val output = processor.process(action, None, resourceProperties)
+
+      output.compile.toList.unsafeToFuture() must throwA(MissingRoles(roleNames)).await
     }
 
     "process an Update action successfully" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -180,8 +178,8 @@ class AccountMembershipSpec extends Specification with Mockito {
         id = accountMemberId,
         user = User(
           id = "fake-user-id",
-          firstName = null,
-          lastName = null,
+          firstName = None,
+          lastName = None,
           emailAddress = emailAddress,
           twoFactorEnabled = false
         ),
@@ -193,8 +191,8 @@ class AccountMembershipSpec extends Specification with Mockito {
         id = accountMemberId,
         user = User(
           id = "fake-user-id",
-          firstName = null,
-          lastName = null,
+          firstName = None,
+          lastName = None,
           emailAddress = emailAddress,
           twoFactorEnabled = false
         ),
@@ -202,61 +200,73 @@ class AccountMembershipSpec extends Specification with Mockito {
         roles = accountRoles.toList
       )
 
-      mockAccountsClient.getAccountMember(accountId, accountMemberId) returns Future.apply(Some(originalAccountMember))
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles)
-      mockAccountsClient.updateAccountMember(accountId, updatedAccountMember) returns Future.apply(updatedAccountMember)
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def updateMember(accountId: String, accountMember: AccountMember) = Stream.emit(updatedAccountMember)
 
-      output must beLike[HandlerResponse] {
+        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
+
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output = processor.process(action, physicalResourceId, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId.asJson)
       }.await
 
-      val responseData = Map(
-        "accountMember" → updatedAccountMember,
-        "updated" → Some(updatedAccountMember),
-        "oldAccountMember" → originalAccountMember
+      val responseData = Json.obj(
+        "accountMember" → updatedAccountMember.asJson,
+        "created" → None.asJson,
+        "updated" → Some(updatedAccountMember).asJson,
+        "oldAccountMember" → originalAccountMember.asJson
       )
 
-      there was one (mockLogger).info(s"Cloudflare AccountMembership response data: ${Serialization.write(responseData)}")
+      there was one(mockLogger).info(resourceProperties("AccountMember").as[AccountMembershipRequest](AccountMembership.accountMembershipRequestDecoder).right.get.toString)
+      there was one(mockLogger).info(s"Cloudflare AccountMembership response data: ${responseData.noSpaces}")
     }
 
     "throw an exception if accounts don't match on Update" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/fake-account-id2/members/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = s"https://api.cloudflare.com/client/v4/accounts/fake-account-id2/members/$accountMemberId"
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+      val fakeAccountsClient = new FakeAccountsClient() {}
 
-      output must throwA(new RuntimeException("Mismatched accounts")).await
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(AccountIdMismatch(accountId, physicalResourceId)).await
     }
 
     "throw an exception if existing account member not found on Update" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -288,27 +298,32 @@ class AccountMembershipSpec extends Specification with Mockito {
         )
       )
 
-      mockAccountsClient.getAccountMember(accountId, accountMemberId) returns Future.apply(None)
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles)
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq)
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+      }
 
-      output must throwA(new RuntimeException("Account member not found")).await
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(AccountMemberNotFound(Some(physicalResourceId))).await
     }
 
     "throw an exception if email address changed on Update" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -353,27 +368,32 @@ class AccountMembershipSpec extends Specification with Mockito {
         roles = accountRoles.take(2).toList
       )
 
-      mockAccountsClient.getAccountMember(accountId, accountMemberId) returns Future.apply(Some(originalAccountMember))
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles)
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq)
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
 
-      output must throwA(new RuntimeException("Unable to update email address for account member")).await
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(RefusingToChangeEmailAddress).await
     }
 
     "throw an exception if roles not found on Update" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -418,60 +438,76 @@ class AccountMembershipSpec extends Specification with Mockito {
         roles = accountRoles.take(2).toList
       )
 
-      mockAccountsClient.getAccountMember(accountId, accountMemberId) returns Future.apply(Some(originalAccountMember))
-      mockAccountsClient.getRolesForAccount(accountId) returns Future.apply(accountRoles.take(2))
+      val fakeAccountsClient = new FakeAccountsClient() {
+        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq).take(2)
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
 
-      output must throwA(MissingRoles(roleNames.map(_.extract[String]))).await
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+
+      private val output = processor.process(action, physicalResourceId, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(MissingRoles(roleNames)).await
     }
 
     "throw an exception if invalid physical resource id format on Update" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = "not-a-cloudflare-uri"
 
       val action = "UPDATE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+      val fakeAccountsClient = new FakeAccountsClient() {}
+      val processor = buildProcessor(fakeAccountsClient, mockLogger)
 
-      output must throwA(new RuntimeException("Passed string does not match URL pattern for Cloudflare account member record")).await
-      there was one (mockLogger).error(s"The physical resource id ${physicalResourceId.get} does not match the URL pattern for a Cloudflare account")
+      private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareAccountUri(physicalResourceId)).await
     }
+  }
+
+  "process Delete" should {
 
     "process a Delete action successfully" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "DELETE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
-      mockAccountsClient.removeAccountMember(accountId, accountMemberId) returns Future.apply(accountMemberId)
+      private val client = new FakeAccountsClient() {
+        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def removeMember(accountId: String, accountMemberId: String) = Stream.emit(accountMemberId)
+      }
 
-      output must beLike[HandlerResponse] {
+      val processor = buildProcessor(client, mockLogger)
+
+      private val output = processor.process(action, physicalResourceId, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must havePair("accountMemberId" → accountMemberId)
+          handlerResponse.data must havePair("accountMemberId" → accountMemberId.asJson)
       }.await
     }
 
@@ -479,74 +515,102 @@ class AccountMembershipSpec extends Specification with Mockito {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "DELETE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
-      val ex = AccountMemberDoesNotExistException(accountId, accountMemberId)
-      mockAccountsClient.removeAccountMember(accountId, accountMemberId) returns Future.failed(ex)
+      private val client = new FakeAccountsClient() {
+        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+        override def removeMember(accountId: String, accountMemberId: String) = Stream.raiseError(AccountMemberDoesNotExistException(accountId, accountMemberId))
+      }
 
-      output must beLike[HandlerResponse] {
+      val processor = buildProcessor(client, mockLogger)
+
+      private val output = processor.process(action, physicalResourceId, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
         case handlerResponse ⇒
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must not(havePair("accountMemberId" → accountMemberId))
+          handlerResponse.data must not(havePair("accountMemberId" → accountMemberId.asJson))
       }.await
 
-      there was one (mockLogger).error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", ex)
+      there was one (mockLogger).error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", AccountMemberDoesNotExistException(accountId, accountMemberId))
     }
 
     "throw an exception if invalid physical resource id format on Delete" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId"
 
       val action = "DELETE"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+      private val client = new FakeAccountsClient() {}
 
-      output must throwA(new RuntimeException("Passed string does not match URL pattern for Cloudflare account member record")).await
-      there was one (mockLogger).error(s"The physical resource id ${physicalResourceId.get} does not match the URL pattern for a Cloudflare account")
+      val processor = buildProcessor(client, mockLogger)
+
+      private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareAccountUri(physicalResourceId)).await
     }
 
+  }
+
+  "Process" should {
     "throw an exception if action not supported" in new Setup {
       val accountId = "fake-account-id1"
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
-      val roleNames = List(JString("Fake Role 1"), JString("Fake Role 2"), JString("Fake Role 3"))
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
+      val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
+      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "BUILD"
-      val resourceProperties: Map[String, JValue] = Map(
-        "AccountMember" → JObject(
-          "AccountID" → JString(accountId),
-          "EmailAddress" → JString(emailAddress),
-          "Roles" → JArray(roleNames)
+      val resourceProperties: Map[String, Json] = Map(
+        "AccountMember" → Json.obj(
+          "AccountID" → Json.fromString(accountId),
+          "EmailAddress" → Json.fromString(emailAddress),
+          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
-      val output = processor.process(action, physicalResourceId, resourceProperties)
+      private val client = new FakeAccountsClient() {
+        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+      }
+      val processor = buildProcessor(client, mockLogger)
 
-      output must throwA(UnsupportedAction(action)).await
-      there was one (mockLogger).error(s"The action $action is not supported by the processor")
+      private val output = processor.process(action, physicalResourceId, resourceProperties)
+
+      output.compile.last.unsafeToFuture() must throwA(UnsupportedAction(action)).await
     }
+
   }
+
+}
+
+class FakeAccountsClient extends AccountsClient[IO] {
+  override def list(): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
+  override def getById(accountId: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
+  override def getByName(name: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
+  override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.raiseError(new NotImplementedError())
+  override def getMember(accountId: String, accountMemberId: String): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def addMember(accountId: String, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def updateMember(accountId: String, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def removeMember(accountId: String, accountMemberId: String): Stream[IO, String] = Stream.raiseError(new NotImplementedError())
 }

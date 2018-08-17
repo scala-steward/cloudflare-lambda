@@ -1,12 +1,12 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
-import com.dwolla.cloudflare.FutureCloudflareApiExecutor
+import cats.effect.IO
+import com.dwolla.cloudflare.StreamingCloudflareApiExecutor
 import com.dwolla.lambda.cloudformation.HandlerResponse
-import org.json4s.JValue
-
-import scala.concurrent.Future
+import io.circe.Json
+import fs2._
 
 trait ResourceRequestProcessor {
-  def process(action: String, physicalResourceId: Option[String], properties: Map[String, JValue])
-             (implicit executor: FutureCloudflareApiExecutor): Future[HandlerResponse]
+  val executor: StreamingCloudflareApiExecutor[IO]
+  def process(action: String, physicalResourceId: Option[String], properties: Map[String, Json]): Stream[IO, HandlerResponse]
 }

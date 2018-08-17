@@ -9,4 +9,15 @@ object Exceptions {
 
   case class UnsupportedAction(action: String)
     extends RuntimeException(s"""Action "$action" not supported.""")
+
+  case class AccountIdMismatch(requestAccountId: String, physicalResourceId: String)
+    extends RuntimeException(s"Mismatched accounts: $requestAccountId does not match the Account ID in $physicalResourceId")
+
+  case class AccountMemberNotFound(physicalResourceId: Option[String])
+    extends RuntimeException(s"Account member not found at $physicalResourceId.")
+
+  case object RefusingToChangeEmailAddress extends RuntimeException("Unable to update email address for account member")
+
+  case class InvalidCloudflareAccountUri(physicalResourceId: String)
+    extends RuntimeException(s"The physical resource id $physicalResourceId does not match the URL pattern for a Cloudflare account")
 }
