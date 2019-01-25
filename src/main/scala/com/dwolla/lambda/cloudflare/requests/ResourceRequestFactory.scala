@@ -5,7 +5,6 @@ import cats.effect._
 import com.dwolla.cloudflare._
 import com.dwolla.fs2aws.kms.KmsDecrypter
 import com.dwolla.lambda.cloudflare.Exceptions.UnsupportedResourceType
-import com.dwolla.lambda.cloudflare._
 import com.dwolla.lambda.cloudflare.requests.processors._
 import com.dwolla.lambda.cloudformation._
 import io.circe.Json

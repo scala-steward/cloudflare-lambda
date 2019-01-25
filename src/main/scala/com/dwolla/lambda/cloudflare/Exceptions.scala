@@ -18,6 +18,6 @@ object Exceptions {
 
   case object RefusingToChangeEmailAddress extends RuntimeException("Unable to update email address for account member")
 
-  case class InvalidCloudflareAccountUri(physicalResourceId: String)
-    extends RuntimeException(s"The physical resource id $physicalResourceId does not match the URL pattern for a Cloudflare account")
+  case class InvalidCloudflareUri(physicalResourceId: String)
+    extends RuntimeException(s"The physical resource id $physicalResourceId does not match the URL pattern for a Cloudflare resource")
 }

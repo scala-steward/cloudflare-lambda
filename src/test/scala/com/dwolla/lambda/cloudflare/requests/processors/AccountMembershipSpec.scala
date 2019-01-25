@@ -1,6 +1,7 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
-import cats.effect.IO
+import cats.effect._
+import cats.implicits._
 import com.dwolla.cloudflare.domain.model.accounts._
 import com.dwolla.cloudflare._
 import com.dwolla.lambda.cloudformation.HandlerResponse
@@ -12,25 +13,32 @@ import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 import _root_.fs2._
+import com.dwolla.cloudflare.domain.model._
 import com.dwolla.lambda.cloudflare.Exceptions._
 import org.specs2.concurrent.ExecutionEnv
+import shapeless.tag.@@
 
 class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification with Mockito {
+  private implicit def encodeTaggedString[A]: Encoder[String @@ A] = Encoder[String].narrow
+
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
     val mockLogger: Logger = mock[Logger]
 
-    def buildProcessor(fakeClient: AccountsClient[IO], log: Logger): AccountMembership =
+    def buildProcessor(log: Logger,
+                       fakeAccountsClient: AccountsClient[IO] = new FakeAccountsClient,
+                       fakeMembersClient: AccountMembersClient[IO] = new FakeAccountMembersClient): AccountMembership =
       new AccountMembership(mockExecutor) {
         override protected lazy val logger: Logger = log
-        override protected lazy val accountsClient = fakeClient
+        override protected lazy val accountsClient = fakeAccountsClient
+        override protected lazy val accountMembersClient = fakeMembersClient
       }
   }
 
   "process Create/Update" should {
     "handle a Create action successfully" in new Setup {
       val accountId = "fake-account-id1"
-      val accountMemberId = "fake-account-member-id"
+      val accountMemberId = "fake-account-member-id".asInstanceOf[AccountMemberId]
       val emailAddress = "test@test.com"
       val roleNames = List(Json.fromString("Fake Role 1"), Json.fromString("Fake Role 2"))
 
@@ -66,7 +74,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMember = AccountMember(
         id = accountMemberId,
         user = User(
-          id = "fake-user-id",
+          id = "fake-user-id".asInstanceOf[UserId],
           firstName = None,
           lastName = None,
           emailAddress = emailAddress,
@@ -77,12 +85,14 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
-
-        override def addMember(accountId: String, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.emit(accountMember)
+        override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val fakeAccountMembersClient = new FakeAccountMembersClient() {
+        override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.emit(accountMember)
+      }
+
+      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
 
       private val output: Stream[IO, HandlerResponse] = processor.process(action, None, resourceProperties)
 
@@ -119,11 +129,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
+      val fakeClient = new FakeAccountsClient() {
+        override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val processor = buildProcessor(mockLogger, fakeClient)
 
       private val output = processor.process(action, None, resourceProperties)
 
@@ -132,7 +142,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
     "process an Update action successfully" in new Setup {
       val accountId = "fake-account-id1"
-      val accountMemberId = "fake-account-member-id"
+      val accountMemberId = "fake-account-member-id".asInstanceOf[AccountMemberId]
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
@@ -177,7 +187,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val originalAccountMember = AccountMember(
         id = accountMemberId,
         user = User(
-          id = "fake-user-id",
+          id = "fake-user-id".asInstanceOf[UserId],
           firstName = None,
           lastName = None,
           emailAddress = emailAddress,
@@ -190,7 +200,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val updatedAccountMember = AccountMember(
         id = accountMemberId,
         user = User(
-          id = "fake-user-id",
+          id = "fake-user-id".asInstanceOf[UserId],
           firstName = None,
           lastName = None,
           emailAddress = emailAddress,
@@ -201,14 +211,16 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
-
-        override def updateMember(accountId: String, accountMember: AccountMember) = Stream.emit(updatedAccountMember)
-
-        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+        override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val fakeAccountMembersClient = new FakeAccountMembersClient() {
+        override def updateMember(accountId: AccountId, accountMember: AccountMember) = Stream.emit(updatedAccountMember)
+
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
+
+      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(action, physicalResourceId, resourceProperties)
 
@@ -245,9 +257,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      val fakeAccountsClient = new FakeAccountsClient() {}
-
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val processor = buildProcessor(mockLogger)
 
       private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
 
@@ -299,12 +309,14 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq)
-
-        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+        override def listRoles(accountId: AccountId) = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val fakeAccountMembersClient = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
+      }
+
+      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
 
@@ -356,9 +368,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val originalAccountMember = AccountMember(
-        id = accountMemberId,
+        id = accountMemberId.asInstanceOf[AccountMemberId],
         user = User(
-          id = "fake-user-id",
+          id = "fake-user-id".asInstanceOf[UserId],
           firstName = null,
           lastName = null,
           emailAddress = "not_the_same@test.com",
@@ -369,12 +381,14 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq)
-
-        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+        override def listRoles(accountId: AccountId) = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val fakeAccountMembersClient = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
+
+      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
 
@@ -426,9 +440,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val originalAccountMember = AccountMember(
-        id = accountMemberId,
+        id = accountMemberId.asInstanceOf[AccountMemberId],
         user = User(
-          id = "fake-user-id",
+          id = "fake-user-id".asInstanceOf[UserId],
           firstName = null,
           lastName = null,
           emailAddress = emailAddress,
@@ -439,12 +453,14 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
-        override def listRoles(accountId: String) = Stream.emits(accountRoles.toSeq).take(2)
-
-        override def getMember(accountId: String, accountMemberId: String) = Stream.emit(originalAccountMember)
+        override def listRoles(accountId: AccountId) = Stream.emits(accountRoles.toSeq).take(2)
       }
 
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val fakeAccountMembersClient = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
+      }
+
+      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(action, physicalResourceId, resourceProperties)
 
@@ -467,12 +483,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      val fakeAccountsClient = new FakeAccountsClient() {}
-      val processor = buildProcessor(fakeAccountsClient, mockLogger)
+      val processor = buildProcessor(log = mockLogger)
 
       private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareAccountUri(physicalResourceId)).await
+      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareUri(physicalResourceId)).await
     }
   }
 
@@ -494,13 +509,13 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      private val client = new FakeAccountsClient() {
-        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+      private val client = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
 
-        override def removeMember(accountId: String, accountMemberId: String) = Stream.emit(accountMemberId)
+        override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.emit(accountMemberId.asInstanceOf[AccountMemberId])
       }
 
-      val processor = buildProcessor(client, mockLogger)
+      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
 
       private val output = processor.process(action, physicalResourceId, resourceProperties)
 
@@ -512,7 +527,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
     }
 
     "process a Delete action successfully even if existing account member not found" in new Setup {
-      val accountId = "fake-account-id1"
+      val accountId = "fake-account-id1".asInstanceOf[AccountId]
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
@@ -527,13 +542,13 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      private val client = new FakeAccountsClient() {
-        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+      private val client = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
 
-        override def removeMember(accountId: String, accountMemberId: String) = Stream.raiseError(AccountMemberDoesNotExistException(accountId, accountMemberId))
+        override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.raiseError(AccountMemberDoesNotExistException(accountId, accountMemberId))
       }
 
-      val processor = buildProcessor(client, mockLogger)
+      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
 
       private val output = processor.process(action, physicalResourceId, resourceProperties)
 
@@ -562,13 +577,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      private val client = new FakeAccountsClient() {}
-
-      val processor = buildProcessor(client, mockLogger)
+      private val processor = buildProcessor(mockLogger)
 
       private val output = processor.process(action, Some(physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareAccountUri(physicalResourceId)).await
+      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareUri(physicalResourceId)).await
     }
 
   }
@@ -590,10 +603,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      private val client = new FakeAccountsClient() {
-        override def getMember(accountId: String, accountMemberId: String) = Stream.empty
+      private val client = new FakeAccountMembersClient() {
+        override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
       }
-      val processor = buildProcessor(client, mockLogger)
+      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
 
       private val output = processor.process(action, physicalResourceId, resourceProperties)
 
@@ -608,9 +621,12 @@ class FakeAccountsClient extends AccountsClient[IO] {
   override def list(): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
   override def getById(accountId: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
   override def getByName(name: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
-  override def listRoles(accountId: String): Stream[IO, AccountRole] = Stream.raiseError(new NotImplementedError())
-  override def getMember(accountId: String, accountMemberId: String): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def addMember(accountId: String, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def updateMember(accountId: String, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def removeMember(accountId: String, accountMemberId: String): Stream[IO, String] = Stream.raiseError(new NotImplementedError())
+  override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.raiseError(new NotImplementedError())
+}
+
+class FakeAccountMembersClient extends AccountMembersClient[IO] {
+  override def getById(accountId: AccountId, memberId: String): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def updateMember(accountId: AccountId, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
+  override def removeMember(accountId: AccountId, accountMemberId: String): Stream[IO, AccountMemberId] = Stream.raiseError(new NotImplementedError())
 }
