@@ -4,14 +4,14 @@ import cats.data._
 import cats.effect._
 import com.dwolla.fs2aws.kms.KmsDecrypter
 import com.dwolla.lambda.cloudflare.requests.ResourceRequestFactory
-import com.dwolla.lambda.cloudformation.{CatsAbstractCustomResourceHandler, CloudFormationCustomResourceRequest, HandlerResponse}
+import com.dwolla.lambda.cloudformation._
 import fs2.Stream
 import org.http4s.client.Client
 import org.http4s.client.blaze.Http1Client
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class CloudflareHandler(httpClientStream: Stream[IO, Client[IO]], kmsClientStream: Stream[IO, KmsDecrypter[IO]]) extends CatsAbstractCustomResourceHandler[IO] {
+class CloudflareHandler(httpClientStream: Stream[IO, Client[IO]], kmsClientStream: Stream[IO, KmsDecrypter[IO]]) extends AbstractCustomResourceHandler[IO] {
   def this() = this(Http1Client.stream[IO](), KmsDecrypter.stream[IO]())
 
   protected lazy val resourceRequestFactory = new ResourceRequestFactory(httpClientStream, kmsClientStream)
