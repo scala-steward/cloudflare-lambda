@@ -17,6 +17,7 @@ class ResourceRequestFactory[F[_] : Sync](httpClientStream: Stream[F, Client[F]]
 
   protected val processors: Map[String, ProcessorReader] = Map(
     "Custom::CloudflareAccountMembership" → Reader(new AccountMembership(_)),
+    "Custom::CloudflarePageRule" -> Reader(new PageRuleProcessor(_)),
   )
 
   def processorFor(resourceType: ResourceType): Stream[F, Reader[StreamingCloudflareApiExecutor[F], ResourceRequestProcessor[F]]] =

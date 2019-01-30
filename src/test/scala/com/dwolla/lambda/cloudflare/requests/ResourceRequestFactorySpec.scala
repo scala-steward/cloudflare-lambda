@@ -106,6 +106,18 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
       }.await
     }
 
+    "return a PageRuleProcessor for the CloudflarePageRule custom type" in new Setup {
+      val factory = new ResourceRequestFactory[IO](Stream.empty, Stream.empty) {
+        override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = mockExecutor
+      }
+
+      private val output = factory.processorFor("Custom::CloudflarePageRule".asInstanceOf[ResourceType]).map(_(mockExecutor))
+
+      output.compile.last.unsafeToFuture() must beSome[ResourceRequestProcessor[IO]].like {
+        case _: PageRuleProcessor[IO] => success
+      }.await
+    }
+
   }
 
   private def buildRequest(resourceType: ResourceType, resourceProperties: Option[JsonObject] = None) =
