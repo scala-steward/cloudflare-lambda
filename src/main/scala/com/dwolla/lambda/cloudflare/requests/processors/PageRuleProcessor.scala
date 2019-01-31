@@ -13,10 +13,9 @@ import io.circe.syntax._
 import com.dwolla.circe._
 import com.dwolla.lambda.cloudflare.Exceptions._
 
-class PageRuleProcessor[F[_] : Sync](override val executor: StreamingCloudflareApiExecutor[F]) extends ResourceRequestProcessor[F] {
+class PageRuleProcessor[F[_] : Sync](zoneClient: ZoneClient[F], pageRuleClient: PageRuleClient[F]) extends ResourceRequestProcessor[F] {
 
-  protected lazy val zoneClient: ZoneClient[F] = ZoneClient(executor)
-  protected lazy val pageRuleClient: PageRuleClient[F] = PageRuleClient(executor)
+  def this(executor: StreamingCloudflareApiExecutor[F]) = this(ZoneClient(executor), PageRuleClient(executor))
 
   override def process(action: CloudFormationRequestType,
                        physicalResourceId: Option[PhysicalResourceId],

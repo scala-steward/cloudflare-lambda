@@ -28,10 +28,8 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
 
     def buildProcessor(fakePageRuleClient: PageRuleClient[IO] = new FakePageRuleClient,
                        fakeZoneClient: ZoneClient[IO] = new FakeZoneClient,
-                      ): PageRuleProcessor[IO] = new PageRuleProcessor[IO](null) {
-      override protected lazy val pageRuleClient: PageRuleClient[IO] = fakePageRuleClient
-      override protected lazy val zoneClient: ZoneClient[IO] = fakeZoneClient
-    }
+                      ): PageRuleProcessor[IO] =
+      new PageRuleProcessor[IO](fakeZoneClient, fakePageRuleClient)(null)
   }
 
   "processing Creates" should {

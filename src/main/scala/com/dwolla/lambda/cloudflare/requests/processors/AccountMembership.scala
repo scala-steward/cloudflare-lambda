@@ -17,11 +17,11 @@ import org.slf4j.Logger
 import com.dwolla.circe._
 import com.dwolla.cloudflare.domain.model.AccountId
 
-class AccountMembership[F[_] : Sync](override val executor: StreamingCloudflareApiExecutor[F]) extends ResourceRequestProcessor[F] {
-  protected lazy val logger: Logger = org.slf4j.LoggerFactory.getLogger("LambdaLogger")
+class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountMembersClient: AccountMembersClient[F]) extends ResourceRequestProcessor[F] {
 
-  protected lazy val accountMembersClient = AccountMembersClient(executor)
-  protected lazy val accountsClient = AccountsClient(executor)
+  def this(executor: StreamingCloudflareApiExecutor[F]) = this(AccountsClient(executor), AccountMembersClient(executor))
+
+  protected lazy val logger: Logger = org.slf4j.LoggerFactory.getLogger("LambdaLogger")
 
   override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[F, HandlerResponse] =
     for {

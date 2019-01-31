@@ -35,7 +35,6 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
       private val response = HandlerResponse(tagPhysicalResourceId("1"))
       private val fakeProcessor = new ResourceRequestProcessor[IO] {
-        override val executor: StreamingCloudflareApiExecutor[IO] = mockExecutor
         override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse] =
           if (action != request.RequestType || physicalResourceId != request.PhysicalResourceId || properties != request.ResourceProperties.get)
             Stream.raiseError(new RuntimeException(s"unexpected arguments: ($action, $physicalResourceId, $properties)"))
@@ -75,7 +74,6 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
       val request = buildRequest("Custom::Tester".asInstanceOf[ResourceType])
 
       val fakeProcessor = new ResourceRequestProcessor[IO] {
-        override val executor: StreamingCloudflareApiExecutor[IO] = mockExecutor
         override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse] = ???
       }
 

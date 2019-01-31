@@ -27,10 +27,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
     def buildProcessor(log: Logger,
                        fakeAccountsClient: AccountsClient[IO] = new FakeAccountsClient,
                        fakeMembersClient: AccountMembersClient[IO] = new FakeAccountMembersClient): AccountMembership[IO] =
-      new AccountMembership(mockExecutor) {
+      new AccountMembership(fakeAccountsClient, fakeMembersClient) {
         override protected lazy val logger: Logger = log
-        override protected lazy val accountsClient = fakeAccountsClient
-        override protected lazy val accountMembersClient = fakeMembersClient
       }
   }
 
