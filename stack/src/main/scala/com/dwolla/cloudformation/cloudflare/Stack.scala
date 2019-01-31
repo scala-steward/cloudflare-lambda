@@ -54,7 +54,9 @@ object Stack {
             Action = Seq(
               "kms:Encrypt",
               "kms:ReEncrypt",
-              "kms:DescribeKey"
+              "kms:Describe*",
+              "kms:Get*",
+              "kms:List*",
             ),
             Resource = Option("*")
           ),
