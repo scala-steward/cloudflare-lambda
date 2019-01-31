@@ -2,46 +2,51 @@ package com.dwolla.lambda.cloudflare.requests
 
 import cats.data._
 import cats.effect._
+import cats.implicits._
 import com.dwolla.cloudflare._
 import com.dwolla.fs2aws.kms.KmsDecrypter
-import com.dwolla.lambda.cloudflare.Exceptions.UnsupportedResourceType
-import com.dwolla.lambda.cloudflare._
 import com.dwolla.lambda.cloudflare.requests.processors._
 import com.dwolla.lambda.cloudformation._
-import io.circe.Json
+import io.circe._
 import io.circe.fs2.decoder
-import fs2._
+import _root_.fs2._
 import org.http4s.client.Client
 
-class ResourceRequestFactory(httpClientStream: Stream[IO, Client[IO]], kmsClientStream: Stream[IO, KmsDecrypter[IO]]) {
-  protected val processors: Map[String, Reader[StreamingCloudflareApiExecutor[IO], ResourceRequestProcessor]] = Map(
+class ResourceRequestFactory[F[_] : Sync](httpClientStream: Stream[F, Client[F]], kmsClientStream: Stream[F, KmsDecrypter[F]]) {
+  protected type ProcessorReader = Reader[StreamingCloudflareApiExecutor[F], ResourceRequestProcessor[F]]
+
+  protected val processors: Map[String, ProcessorReader] = Map(
     "Custom::CloudflareAccountMembership" → Reader(new AccountMembership(_)),
+    "Custom::CloudflarePageRule" -> Reader(new PageRuleProcessor(_)),
   )
 
-  protected def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] =
-    new StreamingCloudflareApiExecutor[IO](httpClient, CloudflareAuthorization(email, key))
+  def processorFor(resourceType: ResourceType): Stream[F, Reader[StreamingCloudflareApiExecutor[F], ResourceRequestProcessor[F]]] =
+    Stream.fromEither[F](processors.get(resourceType).toRight(UnsupportedResourceType(resourceType)))
 
-  private def constructCloudflareExecutor(resourceProperties: Map[String, Json]): Stream[IO, StreamingCloudflareApiExecutor[IO]] =
+  protected def cloudflareExecutor(httpClient: Client[F], email: String, key: String): StreamingCloudflareApiExecutor[F] =
+    new StreamingCloudflareApiExecutor[F](httpClient, CloudflareAuthorization(email, key))
+
+  private def constructCloudflareExecutor(resourceProperties: JsonObject): Stream[F, StreamingCloudflareApiExecutor[F]] =
     for {
       (email, key) ← decryptSensitiveProperties(resourceProperties)
-      httpClient: Client[IO] ← httpClientStream
+      httpClient: Client[F] ← httpClientStream
     } yield cloudflareExecutor(httpClient, email, key)
 
-  private def decryptSensitiveProperties(resourceProperties: Map[String, Json]): Stream[IO, (String, String)] =
+  private def decryptSensitiveProperties(resourceProperties: JsonObject): Stream[F, (String, String)] =
     for {
       kmsClient ← kmsClientStream
-      emailCryptoText ← Stream.emit(resourceProperties("CloudflareEmail")).covary[IO].through(decoder[IO, String])
-      keyCryptoText ← Stream.emit(resourceProperties("CloudflareKey")).covary[IO].through(decoder[IO, String])
+      emailCryptoText ← Stream.emits(resourceProperties("CloudflareEmail").toSeq).covary[F].through(decoder[F, String])
+      keyCryptoText ← Stream.emits(resourceProperties("CloudflareKey").toSeq).covary[F].through(decoder[F, String])
       plaintextMap ← kmsClient.decryptBase64("CloudflareEmail" → emailCryptoText, "CloudflareKey" → keyCryptoText).map(_.mapValues(new String(_, "UTF-8")))
       emailPlaintext = plaintextMap("CloudflareEmail")
       keyPlaintext = plaintextMap("CloudflareKey")
     } yield (emailPlaintext, keyPlaintext)
 
-  def process(input: CloudFormationCustomResourceRequest): Stream[IO, HandlerResponse] =
+  def process(input: CloudFormationCustomResourceRequest): Stream[F, HandlerResponse] =
     for {
-      resourceProcessor ← Stream.fromEither[IO](processors.get(input.ResourceType).toRight(UnsupportedResourceType(input.ResourceType)))
-      resourceProperties ← Stream.fromEither[IO](input.ResourceProperties.toRight(MissingResourceProperties))
+      resourceProcessor ← processorFor(input.ResourceType)
+      resourceProperties ← Stream.fromEither[F](input.ResourceProperties.toRight(MissingResourceProperties))
       executor ← constructCloudflareExecutor(resourceProperties)
-      res ← resourceProcessor(executor).process(input.RequestType.toUpperCase(), input.PhysicalResourceId, resourceProperties)
+      res ← resourceProcessor(executor).process(input.RequestType, input.PhysicalResourceId, resourceProperties)
     } yield res
 }
