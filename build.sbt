@@ -17,7 +17,7 @@ lazy val root = (project in file("."))
     ),
     libraryDependencies ++= {
       Seq(
-        "com.dwolla" %% "scala-cloudformation-custom-resource" % "3.0.0",
+        "com.dwolla" %% "scala-cloudformation-custom-resource" % "3.0.1",
         "com.dwolla" %% "fs2-aws" % "1.3.0",
         "io.circe" %% "circe-fs2" % "0.9.0",
         "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M5",
