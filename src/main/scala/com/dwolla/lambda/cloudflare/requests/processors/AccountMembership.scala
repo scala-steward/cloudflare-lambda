@@ -3,7 +3,6 @@ package com.dwolla.lambda.cloudflare.requests.processors
 import _root_.fs2._
 import _root_.io.circe._
 import _root_.io.circe.syntax._
-import cats._
 import cats.data._
 import cats.effect._
 import cats.implicits._
@@ -31,7 +30,7 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
 
   private def handleAction(action: CloudFormationRequestType, request: AccountMembershipRequest, physicalResourceId: Option[PhysicalResourceId]): Stream[F, HandlerResponse] =
     for {
-      () ← Stream.eval(Sync[F].delay(logger.info(s"$request")))
+      () ← Stream.eval(Sync[F].delay(logger.info(s"$action $request")))
       existingAccountMember ← findExistingMember(physicalResourceId, request.accountId).last
       res ← action match {
         case UpdateRequest if existingAccountMember.isEmpty ⇒ Stream.raiseError(AccountMemberNotFound(physicalResourceId)).covary[F]
@@ -92,13 +91,11 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
     }
 
   private def findRequestedRoles(accountId: AccountId, requestedRoleNames: Set[String]): F[List[AccountRole]] =
-    for {
-      roles ← accountsClient.listRoles(accountId).compile.toList
-      () ← Sync[F].delay(logger.debug(s"Requested roles for account: $requestedRoleNames"))
-      () ← Sync[F].delay(logger.debug(s"Found roles for account: $roles"))
-      foundRoles = roles.filter(ar ⇒ requestedRoleNames.contains(ar.name))
-      res ← if (requestedRoleNames == foundRoles.map(_.name).toSet) Applicative[F].pure(roles) else ApplicativeError[F, Throwable].raiseError(MissingRoles(requestedRoleNames.toList))
-    } yield res
+    Sync[F].delay(logger.debug(s"Requested roles for account: $requestedRoleNames")) *>
+    accountsClient.listRoles(accountId).compile.toList
+      .flatTap(roles => Sync[F].delay(logger.debug(s"Found roles for account: $roles")))
+      .map(_.filter(accountRole ⇒ requestedRoleNames.contains(accountRole.name)))
+      .ensure(MissingRoles(requestedRoleNames.toList))(_.map(_.name).toSet == requestedRoleNames)
 
   private def createOrUpdateToHandlerResponse(accountId: AccountId, createOrUpdate: CreateOrUpdate[AccountMember], existing: Option[AccountMember]): F[HandlerResponse] = {
     import _root_.io.circe.generic.auto._

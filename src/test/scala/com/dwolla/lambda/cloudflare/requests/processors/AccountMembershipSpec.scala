@@ -1,5 +1,7 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
+import java.util.UUID
+
 import cats.effect._
 import com.dwolla.cloudflare.domain.model.accounts._
 import com.dwolla.cloudflare._
@@ -23,6 +25,15 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
     val mockLogger: Logger = mock[Logger]
+
+    val badRole = AccountRole(
+      id = UUID.randomUUID().toString,
+      name = "Extra Bonus Fake Role",
+      description = "Don't use me!",
+      permissions = Map.empty[String, AccountRolePermissions]
+    )
+
+    val badRoleId: AccountRole => Boolean = _.id == badRole.id
 
     def buildProcessor(log: Logger,
                        fakeAccountsClient: AccountsClient[IO] = new FakeAccountsClient,
@@ -64,7 +75,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
             "zone" → AccountRolePermissions(read = true, edit = false),
             "logs" → AccountRolePermissions(read = true, edit = false)
           )
-        )
+        ),
+        badRole
       )
 
       val accountMember = AccountMember(
@@ -77,7 +89,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           twoFactorEnabled = false
         ),
         status = "pending",
-        roles = accountRoles.toList
+        roles = accountRoles.toList.filterNot(badRoleId)
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
@@ -85,7 +97,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       }
 
       val fakeAccountMembersClient = new FakeAccountMembersClient() {
-        override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.emit(accountMember)
+        override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] =
+          if (accountMember.roles.exists(badRoleId)) Stream.raiseError(AccountContainsUnrequestedRolesException)
+          else Stream.emit(accountMember)
       }
 
       val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
@@ -175,7 +189,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           permissions = Map[String, AccountRolePermissions](
             "crypto" → AccountRolePermissions(read = true, edit = false)
           )
-        )
+        ),
+        badRole,
       )
 
       val originalAccountMember = AccountMember(
@@ -201,7 +216,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           twoFactorEnabled = false
         ),
         status = "accepted",
-        roles = accountRoles.toList
+        roles = accountRoles.toList.filterNot(badRoleId)
       )
 
       val fakeAccountsClient = new FakeAccountsClient() {
@@ -209,7 +224,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       }
 
       val fakeAccountMembersClient = new FakeAccountMembersClient() {
-        override def updateMember(accountId: AccountId, accountMember: AccountMember) = Stream.emit(updatedAccountMember)
+        override def updateMember(accountId: AccountId, accountMember: AccountMember) =
+          if (accountMember.roles.exists(badRoleId)) Stream.raiseError(AccountContainsUnrequestedRolesException)
+          else Stream.emit(updatedAccountMember)
 
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
       }
@@ -231,7 +248,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         "oldAccountMember" → originalAccountMember.asJson
       )
 
-      there was one(mockLogger).info(resourceProperties("AccountMember").toRight(MissingResourcePropertiesKey("AccountMember")).flatMap(_.as[AccountMembershipRequest](AccountMembership.accountMembershipRequestDecoder)).right.get.toString)
+      val request: AccountMembershipRequest =
+        resourceProperties("AccountMember").toRight(MissingResourcePropertiesKey("AccountMember")).flatMap(_.as[AccountMembershipRequest](AccountMembership.accountMembershipRequestDecoder)).getOrElse(null)
+      there was one(mockLogger).info(s"$UpdateRequest $request")
       there was one(mockLogger).info(s"Cloudflare AccountMembership response data: ${responseData.noSpaces}")
     }
 
@@ -616,3 +635,5 @@ class FakeAccountMembersClient extends AccountMembersClient[IO] {
   override def updateMember(accountId: AccountId, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
   override def removeMember(accountId: AccountId, accountMemberId: String): Stream[IO, AccountMemberId] = Stream.raiseError(new NotImplementedError())
 }
+
+object AccountContainsUnrequestedRolesException extends RuntimeException("exception intentionally thrown by test", null, true, false)
