@@ -12,6 +12,12 @@ object Exceptions {
 
   case object RefusingToChangeEmailAddress extends RuntimeException("Unable to update email address for account member")
 
+  case class RateLimitNotFound(physicalResourceId: Option[String])
+    extends RuntimeException(s"Rate limit not found at $physicalResourceId.")
+
+  case class ZoneNotFound(domain: String)
+    extends RuntimeException(s"Zone not found for domain $domain")
+
   case class InvalidCloudflareUri(physicalResourceId: String)
     extends RuntimeException(s"The physical resource id $physicalResourceId does not match the URL pattern for a Cloudflare resource")
 }
