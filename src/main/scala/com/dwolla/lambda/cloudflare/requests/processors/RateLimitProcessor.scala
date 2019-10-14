@@ -15,15 +15,13 @@ import com.dwolla.circe._
 
 class RateLimitProcessor[F[_] : Sync](zoneClient: ZoneClient[F], rateLimitClient: RateLimitClient[F]) extends ResourceRequestProcessor[F] {
 
-  import RateLimitProcessor._
-
   def this(executor: StreamingCloudflareApiExecutor[F]) = this(ZoneClient(executor), RateLimitClient(executor))
 
   override def process(action: CloudFormationRequestType,
                        physicalResourceId: Option[PhysicalResourceId],
                        properties: JsonObject): Stream[F, HandlerResponse] =
     for {
-      request <- parseRecordFrom[WrappedRateLimit](properties, "RateLimit")
+      request <- parseRecordFrom[RateLimit](properties, "RateLimit")
       resp <- handleAction(action, request, physicalResourceId, properties)
     } yield resp
 
@@ -67,38 +65,5 @@ class RateLimitProcessor[F[_] : Sync](zoneClient: ZoneClient[F], rateLimitClient
   private object PhysicalResourceId {
     def unapply(arg: Option[PhysicalResourceId]): Option[(ZoneId, RateLimitId)] =
       arg.flatMap(rateLimitClient.parseUri)
-  }
-
-  object RateLimitProcessor {
-
-    case class WrappedRateLimit(rateLimit: RateLimit)
-
-    object WrappedRateLimit {
-
-      import com.dwolla.cloudflare.domain.model.ratelimits.RateLimit
-
-      // Troposphere by default outputs booleans as strings in its resulting JSON output.
-      // Because of this, we need to update the RateLimit circe decoder so the disabled field
-      // can be decoded from strings in addition to normal boolean values.
-      private def convertFieldToBoolean(cursor: ACursor, key: String) = {
-        cursor.downField(key).withFocus(_.withString {
-          case "true" => true.asJson
-          case "false" => false.asJson
-          case x => x.asJson
-        }).up
-      }
-
-      private val rateLimitDecoder: Decoder[RateLimit] = RateLimit.rateLimitDecoder.instance
-        .prepare(convertFieldToBoolean(_, "disabled"))
-
-      implicit val wrappedRateLimitDecoder: Decoder[WrappedRateLimit] = c => {
-        for {
-          rateLimit <- rateLimitDecoder(c)
-        } yield WrappedRateLimit(rateLimit)
-      }
-
-      implicit final def wrappedRateLimit2RateLimit(w: WrappedRateLimit): RateLimit = w.rateLimit
-    }
-
   }
 }
