@@ -56,7 +56,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
-          handlerResponse.data must haveKeyValuePair("created" → pageRule.copy(id = Option(pageRuleId)).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> pageRule.copy(id = Option(pageRuleId)).asJson)
       })
     }
 
@@ -83,7 +83,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown PageRule ID"
-          handlerResponse.data must haveKeyValuePair("created" → pageRule.copy(id = None).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> pageRule.copy(id = None).asJson)
       })
     }
 
@@ -116,7 +116,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
-          handlerResponse.data must haveKeyValuePair("updated" → pageRule.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> pageRule.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
 
@@ -135,7 +135,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
-          handlerResponse.data must haveKeyValuePair("updated" → pageRule.copy(id = None, modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> pageRule.copy(id = None, modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
 
@@ -181,7 +181,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
-          handlerResponse.data must haveKeyValuePair("deleted" → pageRuleId.asJson)
+          handlerResponse.data must haveKeyValuePair("deleted" -> pageRuleId.asJson)
       })
     }
 

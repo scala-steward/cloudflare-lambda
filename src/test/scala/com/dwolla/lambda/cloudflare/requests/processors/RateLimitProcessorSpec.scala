@@ -69,7 +69,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("created" → rateLimit.copy(id = Option(rateLimitId)).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = Option(rateLimitId)).asJson)
       })
     }
 
@@ -96,7 +96,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown RateLimit ID"
-          handlerResponse.data must haveKeyValuePair("created" → rateLimit.copy(id = None).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = None).asJson)
       })
     }
 
@@ -128,7 +128,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("updated" → rateLimit.asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
 
@@ -146,7 +146,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("updated" → rateLimit.asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
 
@@ -189,7 +189,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("deleted" → rateLimitId.asJson)
+          handlerResponse.data must haveKeyValuePair("deleted" -> rateLimitId.asJson)
       })
     }
 

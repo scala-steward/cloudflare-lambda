@@ -50,8 +50,8 @@ lazy val stack: Project = (project in file("stack"))
     },
     stackName := (name in root).value,
     stackParameters := List(
-      "S3Bucket" → (s3Bucket in root).value,
-      "S3Key" → (s3Key in root).value
+      "S3Bucket" -> (s3Bucket in root).value,
+      "S3Key" -> (s3Key in root).value
     ),
     awsAccountId := sys.props.get("AWS_ACCOUNT_ID"),
     awsRoleName := Option("cloudformation/deployer/cloudformation-deployer"),
@@ -69,6 +69,6 @@ assemblyMergeStrategy in assembly := {
   case PathList(ps @ _*) if ps.last == "Log4j2Plugins.dat" => sbtassembly.Log4j2MergeStrategy.plugincache
   case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
   case PathList("log4j2.xml") => MergeStrategy.singleOrError
-  case _ ⇒ MergeStrategy.first
+  case _ => MergeStrategy.first
 }
 test in assembly := {}

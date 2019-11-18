@@ -51,10 +51,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val roleNames = List(Json.fromString("Fake Role 1"), Json.fromString("Fake Role 2"))
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.fromValues(roleNames)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.fromValues(roleNames)
         )
       )
 
@@ -64,7 +64,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -72,8 +72,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 2",
           description = "second fake role",
           permissions = Map[String, AccountRolePermissions](
-            "zone" → AccountRolePermissions(read = true, edit = false),
-            "logs" → AccountRolePermissions(read = true, edit = false)
+            "zone" -> AccountRolePermissions(read = true, edit = false),
+            "logs" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         badRole
@@ -107,9 +107,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val output: Stream[IO, HandlerResponse] = processor.process(CreateRequest, None, resourceProperties)
 
       output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse ⇒
+        case handlerResponse =>
           handlerResponse.physicalId must_== s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
-          handlerResponse.data must haveKeyValuePair("accountMemberId" → accountMemberId.asJson)
+          handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
       }.await
     }
 
@@ -120,10 +120,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val roleNames = List("Fake Role 1", "Fake Role 2")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -133,7 +133,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         )
       )
@@ -157,10 +157,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -170,7 +170,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -178,8 +178,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 2",
           description = "second fake role",
           permissions = Map[String, AccountRolePermissions](
-            "zone" → AccountRolePermissions(read = true, edit = false),
-            "logs" → AccountRolePermissions(read = true, edit = false)
+            "zone" -> AccountRolePermissions(read = true, edit = false),
+            "logs" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -187,7 +187,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 3",
           description = "third fake role",
           permissions = Map[String, AccountRolePermissions](
-            "crypto" → AccountRolePermissions(read = true, edit = false)
+            "crypto" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         badRole,
@@ -236,16 +236,16 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val output = processor.process(UpdateRequest, physicalResourceId, resourceProperties)
 
       output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse ⇒
+        case handlerResponse =>
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must haveKeyValuePair("accountMemberId" → accountMemberId.asJson)
+          handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
       }.await
 
       val responseData = Json.obj(
-        "accountMember" → updatedAccountMember.asJson,
-        "created" → None.asJson,
-        "updated" → Some(updatedAccountMember).asJson,
-        "oldAccountMember" → originalAccountMember.asJson
+        "accountMember" -> updatedAccountMember.asJson,
+        "created" -> None.asJson,
+        "updated" -> Some(updatedAccountMember).asJson,
+        "oldAccountMember" -> originalAccountMember.asJson
       )
 
       val request: AccountMembershipRequest =
@@ -262,10 +262,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/fake-account-id2/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -284,10 +284,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -297,7 +297,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -305,8 +305,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 2",
           description = "second fake role",
           permissions = Map[String, AccountRolePermissions](
-            "zone" → AccountRolePermissions(read = true, edit = false),
-            "logs" → AccountRolePermissions(read = true, edit = false)
+            "zone" -> AccountRolePermissions(read = true, edit = false),
+            "logs" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -314,7 +314,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 3",
           description = "third fake role",
           permissions = Map[String, AccountRolePermissions](
-            "crypto" → AccountRolePermissions(read = true, edit = false)
+            "crypto" -> AccountRolePermissions(read = true, edit = false)
           )
         )
       )
@@ -342,10 +342,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*)
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*)
         )
       )
 
@@ -355,7 +355,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -363,8 +363,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 2",
           description = "second fake role",
           permissions = Map[String, AccountRolePermissions](
-            "zone" → AccountRolePermissions(read = true, edit = false),
-            "logs" → AccountRolePermissions(read = true, edit = false)
+            "zone" -> AccountRolePermissions(read = true, edit = false),
+            "logs" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -372,7 +372,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 3",
           description = "third fake role",
           permissions = Map[String, AccountRolePermissions](
-            "crypto" → AccountRolePermissions(read = true, edit = false)
+            "crypto" -> AccountRolePermissions(read = true, edit = false)
           )
         )
       )
@@ -413,10 +413,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -426,7 +426,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 1",
           description = "this is the first fake role",
           permissions = Map[String, AccountRolePermissions](
-            "analytics" → AccountRolePermissions(read = true, edit = false)
+            "analytics" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -434,8 +434,8 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 2",
           description = "second fake role",
           permissions = Map[String, AccountRolePermissions](
-            "zone" → AccountRolePermissions(read = true, edit = false),
-            "logs" → AccountRolePermissions(read = true, edit = false)
+            "zone" -> AccountRolePermissions(read = true, edit = false),
+            "logs" -> AccountRolePermissions(read = true, edit = false)
           )
         ),
         AccountRole(
@@ -443,7 +443,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           name = "Fake Role 3",
           description = "third fake role",
           permissions = Map[String, AccountRolePermissions](
-            "crypto" → AccountRolePermissions(read = true, edit = false)
+            "crypto" -> AccountRolePermissions(read = true, edit = false)
           )
         )
       )
@@ -484,10 +484,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = tagPhysicalResourceId("not-a-cloudflare-uri")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -509,10 +509,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -527,9 +527,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val output = processor.process(DeleteRequest, physicalResourceId, resourceProperties)
 
       output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse ⇒
+        case handlerResponse =>
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must haveKeyValuePair("accountMemberId" → accountMemberId.asJson)
+          handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
       }.await
     }
 
@@ -541,10 +541,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -559,9 +559,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val output = processor.process(DeleteRequest, physicalResourceId, resourceProperties)
 
       output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse ⇒
+        case handlerResponse =>
           handlerResponse.physicalId must_== physicalResourceId.get
-          handlerResponse.data must not(haveKeyValuePair("accountMemberId" → accountMemberId.asJson))
+          handlerResponse.data must not(haveKeyValuePair("accountMemberId" -> accountMemberId.asJson))
       }.await
 
       there was one (mockLogger).error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", AccountMemberDoesNotExistException(accountId, accountMemberId))
@@ -575,10 +575,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
 
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 
@@ -601,10 +601,10 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
       val action = "BUILD"
       val resourceProperties = JsonObject(
-        "AccountMember" → Json.obj(
-          "AccountID" → Json.fromString(accountId),
-          "EmailAddress" → Json.fromString(emailAddress),
-          "Roles" → Json.arr(roleNames.map(_.asJson): _*),
+        "AccountMember" -> Json.obj(
+          "AccountID" -> Json.fromString(accountId),
+          "EmailAddress" -> Json.fromString(emailAddress),
+          "Roles" -> Json.arr(roleNames.map(_.asJson): _*),
         )
       )
 

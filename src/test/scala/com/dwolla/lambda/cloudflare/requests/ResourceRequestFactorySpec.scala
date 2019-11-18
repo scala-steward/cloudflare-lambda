@@ -19,7 +19,7 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
 
-    val mockKms = new FakeKms(Map("CloudflareEmail" → "cloudflare-account-email@dwollalabs.com", "CloudflareKey" → "fake-key").transform((_, value) ⇒ value.getBytes("UTF-8")))
+    val mockKms = new FakeKms(Map("CloudflareEmail" -> "cloudflare-account-email@dwollalabs.com", "CloudflareKey" -> "fake-key").transform((_, value) => value.getBytes("UTF-8")))
 
     val mockClient = Client.fromHttpService(HttpService.empty[IO])
 
@@ -29,8 +29,8 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
   "process" should {
     "decrypt credentials and send request to processor" in new Setup {
       val request = buildRequest("Custom::Tester".asInstanceOf[ResourceType], Some(JsonObject(
-        "CloudflareEmail" → Json.fromString("cloudflare-account-email@dwollalabs.com"),
-        "CloudflareKey" → Json.fromString("fake-key")
+        "CloudflareEmail" -> Json.fromString("cloudflare-account-email@dwollalabs.com"),
+        "CloudflareKey" -> Json.fromString("fake-key")
       )))
 
       private val response = HandlerResponse(tagPhysicalResourceId("1"))
@@ -44,7 +44,7 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
       val factory = new ResourceRequestFactory[IO](Stream.emit(mockClient), Stream.emit(mockKms)) {
         override protected val processors = Map(
-          customResourceType → Reader(_ ⇒ fakeProcessor)
+          customResourceType -> Reader(_ => fakeProcessor)
         )
 
         override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = mockExecutor
@@ -79,7 +79,7 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
       val factory = new ResourceRequestFactory[IO](Stream.empty, Stream.empty) {
         override protected val processors = Map(
-          customResourceType → Reader(_ ⇒ fakeProcessor)
+          customResourceType -> Reader(_ => fakeProcessor)
         )
 
         override def cloudflareExecutor(httpClient: Client[IO], email: String, key: String): StreamingCloudflareApiExecutor[IO] = {

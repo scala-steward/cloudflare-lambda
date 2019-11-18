@@ -16,9 +16,9 @@ class ResourceRequestFactory[F[_] : Sync](httpClientStream: Stream[F, Client[F]]
   protected type ProcessorReader = Reader[StreamingCloudflareApiExecutor[F], ResourceRequestProcessor[F]]
 
   protected val processors: Map[String, ProcessorReader] = Map(
-    "Custom::CloudflareAccountMembership" → Reader(new AccountMembership(_)),
+    "Custom::CloudflareAccountMembership" -> Reader(new AccountMembership(_)),
     "Custom::CloudflarePageRule" -> Reader(new PageRuleProcessor(_)),
-    "Custom::CloudflareRateLimit" → Reader(new RateLimitProcessor(_)),
+    "Custom::CloudflareRateLimit" -> Reader(new RateLimitProcessor(_)),
   )
 
   def processorFor(resourceType: ResourceType): Stream[F, Reader[StreamingCloudflareApiExecutor[F], ResourceRequestProcessor[F]]] =
@@ -29,25 +29,25 @@ class ResourceRequestFactory[F[_] : Sync](httpClientStream: Stream[F, Client[F]]
 
   private def constructCloudflareExecutor(resourceProperties: JsonObject): Stream[F, StreamingCloudflareApiExecutor[F]] =
     for {
-      (email, key) ← decryptSensitiveProperties(resourceProperties)
-      httpClient: Client[F] ← httpClientStream
+      (email, key) <- decryptSensitiveProperties(resourceProperties)
+      httpClient: Client[F] <- httpClientStream
     } yield cloudflareExecutor(httpClient, email, key)
 
   private def decryptSensitiveProperties(resourceProperties: JsonObject): Stream[F, (String, String)] =
     for {
-      kmsClient ← kmsClientStream
-      emailCryptoText ← Stream.emits(resourceProperties("CloudflareEmail").toSeq).covary[F].through(decoder[F, String])
-      keyCryptoText ← Stream.emits(resourceProperties("CloudflareKey").toSeq).covary[F].through(decoder[F, String])
-      plaintextMap ← kmsClient.decryptBase64("CloudflareEmail" → emailCryptoText, "CloudflareKey" → keyCryptoText).map(_.mapValues(new String(_, "UTF-8")))
+      kmsClient <- kmsClientStream
+      emailCryptoText <- Stream.emits(resourceProperties("CloudflareEmail").toSeq).covary[F].through(decoder[F, String])
+      keyCryptoText <- Stream.emits(resourceProperties("CloudflareKey").toSeq).covary[F].through(decoder[F, String])
+      plaintextMap <- kmsClient.decryptBase64("CloudflareEmail" -> emailCryptoText, "CloudflareKey" -> keyCryptoText).map(_.mapValues(new String(_, "UTF-8")))
       emailPlaintext = plaintextMap("CloudflareEmail")
       keyPlaintext = plaintextMap("CloudflareKey")
     } yield (emailPlaintext, keyPlaintext)
 
   def process(input: CloudFormationCustomResourceRequest): Stream[F, HandlerResponse] =
     for {
-      resourceProcessor ← processorFor(input.ResourceType)
-      resourceProperties ← Stream.fromEither[F](input.ResourceProperties.toRight(MissingResourceProperties))
-      executor ← constructCloudflareExecutor(resourceProperties)
-      res ← resourceProcessor(executor).process(input.RequestType, input.PhysicalResourceId, resourceProperties)
+      resourceProcessor <- processorFor(input.ResourceType)
+      resourceProperties <- Stream.fromEither[F](input.ResourceProperties.toRight(MissingResourceProperties))
+      executor <- constructCloudflareExecutor(resourceProperties)
+      res <- resourceProcessor(executor).process(input.RequestType, input.PhysicalResourceId, resourceProperties)
     } yield res
 }
