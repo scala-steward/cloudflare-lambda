@@ -5,6 +5,7 @@ import cats._
 import cats.data._
 import cats.effect._
 import cats.implicits._
+import com.dwolla.cats._
 import com.dwolla.circe._
 import com.dwolla.cloudflare._
 import com.dwolla.fs2aws.kms.KmsDecrypter
@@ -83,7 +84,7 @@ object ResourceRequestFactory {
     override val process: CloudFormationCustomResourceRequest => F[HandlerResponse] =
       (for {
         resourceProcessor <- processorFor.local[CloudFormationCustomResourceRequest](_.ResourceType)
-        (resourceProperties, executor) <- extractResourceProperties andThen executorFromResourceProperties.tapWith((a: JsonObject, b: StreamingCloudflareApiExecutor[F]) => (a, b))
+        (resourceProperties, executor) <- extractResourceProperties andThen executorFromResourceProperties.tapWithIdentity()
         output <- Kleisli.ask[F, CloudFormationCustomResourceRequest].flatMapF { input =>
           resourceProcessor(executor).process(input.RequestType, input.PhysicalResourceId, resourceProperties).compile.lastOrError
         }
