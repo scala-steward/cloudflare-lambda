@@ -42,7 +42,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
         override def getZoneId(domain: String): Stream[IO, ZoneId] =
           domain match {
             case "zone" => Stream.emit("zone-id").map(shapeless.tag[ZoneIdTag][String])
-            case _ => Stream.raiseError(AccessDenied())
+            case _ => Stream.raiseError[IO](AccessDenied())
           }
       }
       private val processor = buildProcessor(fakePageRuleClient, fakeZoneClient)
@@ -69,7 +69,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
         override def getZoneId(domain: String): Stream[IO, ZoneId] =
           domain match {
             case "zone" => Stream.emit("zone-id").map(shapeless.tag[ZoneIdTag][String])
-            case _ => Stream.raiseError(AccessDenied())
+            case _ => Stream.raiseError[IO](AccessDenied())
           }
       }
       private val processor = buildProcessor(fakePageRuleClient, fakeZoneClient)
@@ -227,13 +227,13 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
 }
 
 class FakePageRuleClient extends PageRuleClient[IO] {
-  override def list(zoneId: ZoneId): Stream[IO, pagerules.PageRule] = Stream.raiseError(new NotImplementedError())
-  override def getById(zoneId: ZoneId, pageRuleId: String): Stream[IO, pagerules.PageRule] = Stream.raiseError(new NotImplementedError())
-  override def create(zoneId: ZoneId, pageRule: pagerules.PageRule): Stream[IO, pagerules.PageRule] = Stream.raiseError(new NotImplementedError())
-  override def update(zoneId: ZoneId, pageRule: pagerules.PageRule): Stream[IO, pagerules.PageRule] = Stream.raiseError(new NotImplementedError())
-  override def delete(zoneId: ZoneId, pageRuleId: String): Stream[IO, PageRuleId] = Stream.raiseError(new NotImplementedError())
+  override def list(zoneId: ZoneId): Stream[IO, pagerules.PageRule] = Stream.raiseError[IO](new NotImplementedError())
+  override def getById(zoneId: ZoneId, pageRuleId: String): Stream[IO, pagerules.PageRule] = Stream.raiseError[IO](new NotImplementedError())
+  override def create(zoneId: ZoneId, pageRule: pagerules.PageRule): Stream[IO, pagerules.PageRule] = Stream.raiseError[IO](new NotImplementedError())
+  override def update(zoneId: ZoneId, pageRule: pagerules.PageRule): Stream[IO, pagerules.PageRule] = Stream.raiseError[IO](new NotImplementedError())
+  override def delete(zoneId: ZoneId, pageRuleId: String): Stream[IO, PageRuleId] = Stream.raiseError[IO](new NotImplementedError())
 }
 
 class FakeZoneClient extends ZoneClient[IO] {
-  override def getZoneId(domain: String): Stream[IO, ZoneId] = Stream.raiseError(new NotImplementedError())
+  override def getZoneId(domain: String): Stream[IO, ZoneId] = Stream.raiseError[IO](new NotImplementedError())
 }

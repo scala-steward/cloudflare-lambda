@@ -98,7 +98,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
       val fakeAccountMembersClient = new FakeAccountMembersClient() {
         override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] =
-          if (accountMember.roles.exists(badRoleId)) Stream.raiseError(AccountContainsUnrequestedRolesException)
+          if (accountMember.roles.exists(badRoleId)) Stream.raiseError[IO](AccountContainsUnrequestedRolesException)
           else Stream.emit(accountMember)
       }
 
@@ -225,7 +225,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
       val fakeAccountMembersClient = new FakeAccountMembersClient() {
         override def updateMember(accountId: AccountId, accountMember: AccountMember) =
-          if (accountMember.roles.exists(badRoleId)) Stream.raiseError(AccountContainsUnrequestedRolesException)
+          if (accountMember.roles.exists(badRoleId)) Stream.raiseError[IO](AccountContainsUnrequestedRolesException)
           else Stream.emit(updatedAccountMember)
 
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
@@ -551,7 +551,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val client = new FakeAccountMembersClient() {
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
 
-        override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.raiseError(AccountMemberDoesNotExistException(accountId, accountMemberId))
+        override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.raiseError[IO](AccountMemberDoesNotExistException(accountId, accountMemberId))
       }
 
       val processor = buildProcessor(mockLogger, fakeMembersClient = client)
@@ -623,17 +623,17 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 }
 
 class FakeAccountsClient extends AccountsClient[IO] {
-  override def list(): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
-  override def getById(accountId: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
-  override def getByName(name: String): Stream[IO, Account] = Stream.raiseError(new NotImplementedError())
-  override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.raiseError(new NotImplementedError())
+  override def list(): Stream[IO, Account] = Stream.raiseError[IO](new NotImplementedError())
+  override def getById(accountId: String): Stream[IO, Account] = Stream.raiseError[IO](new NotImplementedError())
+  override def getByName(name: String): Stream[IO, Account] = Stream.raiseError[IO](new NotImplementedError())
+  override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.raiseError[IO](new NotImplementedError())
 }
 
 class FakeAccountMembersClient extends AccountMembersClient[IO] {
-  override def getById(accountId: AccountId, memberId: String): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def updateMember(accountId: AccountId, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError(new NotImplementedError())
-  override def removeMember(accountId: AccountId, accountMemberId: String): Stream[IO, AccountMemberId] = Stream.raiseError(new NotImplementedError())
+  override def getById(accountId: AccountId, memberId: String): Stream[IO, AccountMember] = Stream.raiseError[IO](new NotImplementedError())
+  override def addMember(accountId: AccountId, emailAddress: String, roleIds: List[String]): Stream[IO, AccountMember] = Stream.raiseError[IO](new NotImplementedError())
+  override def updateMember(accountId: AccountId, accountMember: AccountMember): Stream[IO, AccountMember] = Stream.raiseError[IO](new NotImplementedError())
+  override def removeMember(accountId: AccountId, accountMemberId: String): Stream[IO, AccountMemberId] = Stream.raiseError[IO](new NotImplementedError())
 }
 
 object AccountContainsUnrequestedRolesException extends RuntimeException("exception intentionally thrown by test", null, true, false)

@@ -3,9 +3,12 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint")
 lazy val commonSettings = Seq(
   organization := "Dwolla",
   homepage := Option(url("https://github.com/Dwolla/cloudflare-lambda")),
+  scalaVersion := "2.12.10",
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 )
 
-lazy val specs2Version = "4.3.0"
+lazy val specs2Version = "4.8.1"
 lazy val awsSdkVersion = "1.11.354"
 lazy val scalaAwsUtilsVersion = "1.6.1"
 
@@ -17,17 +20,22 @@ lazy val root = (project in file("."))
     ),
     libraryDependencies ++= {
       Seq(
-        "com.dwolla" %% "scala-cloudformation-custom-resource" % "3.0.1",
-        "com.dwolla" %% "fs2-aws" % "1.3.0",
-        "io.circe" %% "circe-fs2" % "0.9.0",
-        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M7",
-        "org.http4s" %% "http4s-blaze-client" % "0.18.15",
+        "co.fs2" %% "fs2-core" % "2.1.0",
+        "org.typelevel" %% "cats-core" % "2.0.0",
+        "org.typelevel" %% "cats-effect" % "2.0.0",
+        "com.chuusai" %% "shapeless" % "2.3.3",
+        "com.dwolla" %% "scala-cloudformation-custom-resource" % "4.0.0-M2",
+        "com.dwolla" %% "fs2-aws" % "2.0.0-M5",
+        "io.circe" %% "circe-fs2" % "0.12.0",
+        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M8",
+        "org.http4s" %% "http4s-blaze-client" % "0.21.0-M5",
         "com.amazonaws" % "aws-java-sdk-kms" % awsSdkVersion,
         "org.apache.httpcomponents" % "httpclient" % "4.5.2",
         "org.specs2" %% "specs2-core" % specs2Version % Test,
         "org.specs2" %% "specs2-mock" % specs2Version % Test,
         "org.specs2" %% "specs2-matcher-extra" % specs2Version % Test,
-        "com.dwolla" %% "testutils-specs2" % "1.11.0" % Test exclude("ch.qos.logback", "logback-classic")
+        "org.specs2" %% "specs2-cats" % specs2Version % Test,
+        "com.dwolla" %% "testutils-specs2" % "2.0.0-M3" % Test exclude("ch.qos.logback", "logback-classic")
       )
     },
   )
@@ -42,7 +50,7 @@ lazy val stack: Project = (project in file("stack"))
     resolvers ++= Seq(Resolver.jcenterRepo),
     libraryDependencies ++= {
       Seq(
-        "com.monsanto.arch" %% "cloud-formation-template-generator" % "3.8.1",
+        "com.monsanto.arch" %% "cloud-formation-template-generator" % "3.10.0",
         "org.specs2" %% "specs2-core" % specs2Version % "test,it",
         "com.amazonaws" % "aws-java-sdk-cloudformation" % awsSdkVersion % IntegrationTest,
         "com.dwolla" %% "scala-aws-utils" % scalaAwsUtilsVersion % IntegrationTest withSources()

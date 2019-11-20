@@ -33,10 +33,10 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
       () <- Stream.eval(Sync[F].delay(logger.info(s"$action $request")))
       existingAccountMember <- findExistingMember(physicalResourceId, request.accountId).last
       res <- action match {
-        case UpdateRequest if existingAccountMember.isEmpty => Stream.raiseError(AccountMemberNotFound(physicalResourceId)).covary[F]
+        case UpdateRequest if existingAccountMember.isEmpty => Stream.raiseError[F](AccountMemberNotFound(physicalResourceId))
         case CreateRequest | UpdateRequest => handleCreateOrUpdate(request, existingAccountMember)
         case DeleteRequest if physicalResourceId.isDefined => handleDelete(physicalResourceId.get)
-        case OtherRequestType(_) => Stream.raiseError(UnsupportedRequestType(action)).covary[F]
+        case OtherRequestType(_) => Stream.raiseError[F](UnsupportedRequestType(action))
       }
     } yield res
 
@@ -57,7 +57,7 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
                 _ <- Stream.eval(Sync[F].delay(logger.error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", ex)))
               } yield HandlerResponse(physicalResourceId)
           }
-      case None => Stream.raiseError(InvalidCloudflareUri(physicalResourceId))
+      case None => Stream.raiseError[F](InvalidCloudflareUri(physicalResourceId))
     }
 
   /*_*/
@@ -85,9 +85,9 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
       case Some((accountId, accountMemberId)) if accountId == requestedAccountId =>
         accountMembersClient.getById(accountId, accountMemberId).head
       case Some((accountId, _)) if accountId != requestedAccountId =>
-        Stream.raiseError(AccountIdMismatch(requestedAccountId, physicalResourceId.get))
+        Stream.raiseError[F](AccountIdMismatch(requestedAccountId, physicalResourceId.get))
       case None =>
-        Stream.raiseError(InvalidCloudflareUri(physicalResourceId.get))
+        Stream.raiseError[F](InvalidCloudflareUri(physicalResourceId.get))
     }
 
   private def findRequestedRoles(accountId: AccountId, requestedRoleNames: Set[String]): F[List[AccountRole]] =
@@ -119,7 +119,7 @@ class AccountMembership[F[_] : Sync](accountsClient: AccountsClient[F], accountM
       if (request.emailAddress == existingEmailAddress)
         Stream.emit(request)
       else
-        Stream.raiseError(RefusingToChangeEmailAddress)
+        Stream.raiseError[F](RefusingToChangeEmailAddress)
     }
   /*_*/
 }
