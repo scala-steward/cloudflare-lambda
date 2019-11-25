@@ -19,7 +19,7 @@ class StackSpec extends Specification {
       AssumeRolePolicyDocument = PolicyDocument(Seq(
         PolicyStatement(
           Effect = "Allow",
-          Principal = Option(DefinedPrincipal(Map("Service" → Seq("lambda.amazonaws.com")))),
+          Principal = Option(DefinedPrincipal(Map("Service" -> Seq("lambda.amazonaws.com")))),
           Action = Seq("sts:AssumeRole")
         )
       )),

@@ -36,7 +36,7 @@ class RateLimitProcessor[F[_] : Sync](zoneClient: ZoneClient[F], rateLimitClient
     case (CreateRequest, Some(id)) => Stream.raiseError(UnexpectedPhysicalId(id))
     case (_, Some(id)) => Stream.raiseError(InvalidCloudflareUri(id))
     case (UpdateRequest, None) | (DeleteRequest, None) => Stream.raiseError(MissingPhysicalId(action))
-    case (OtherRequestType(_), _) ⇒ Stream.raiseError(UnsupportedRequestType(action))
+    case (OtherRequestType(_), _) => Stream.raiseError(UnsupportedRequestType(action))
   }
 
   private def handleCreate(request: RateLimit, properties: JsonObject): Stream[F, HandlerResponse] =

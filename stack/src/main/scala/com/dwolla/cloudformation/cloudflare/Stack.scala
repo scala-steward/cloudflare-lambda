@@ -10,7 +10,7 @@ object Stack {
       AssumeRolePolicyDocument = PolicyDocument(Seq(
         PolicyStatement(
           Effect = "Allow",
-          Principal = Option(DefinedPrincipal(Map("Service" → Seq("lambda.amazonaws.com")))),
+          Principal = Option(DefinedPrincipal(Map("Service" -> Seq("lambda.amazonaws.com")))),
           Action = Seq("sts:AssumeRole")
         )
       )),
@@ -50,7 +50,7 @@ object Stack {
           PolicyStatement(
             Sid = Option("AllowDataEncrypterToEncrypt"),
             Effect = "Allow",
-            Principal = Option(DefinedPrincipal(Map("AWS" → Seq(`Fn::Sub`("arn:aws:iam::${AWS::AccountId}:role/DataEncrypter"))))),
+            Principal = Option(DefinedPrincipal(Map("AWS" -> Seq(`Fn::Sub`("arn:aws:iam::${AWS::AccountId}:role/DataEncrypter"))))),
             Action = Seq(
               "kms:Encrypt",
               "kms:ReEncrypt",
@@ -63,7 +63,7 @@ object Stack {
           PolicyStatement(
             Sid = Option("AllowLambdaToDecrypt"),
             Effect = "Allow",
-            Principal = Option(DefinedPrincipal(Map("AWS" → Seq(`Fn::GetAtt`(Seq(role.name, "Arn")))))),
+            Principal = Option(DefinedPrincipal(Map("AWS" -> Seq(`Fn::GetAtt`(Seq(role.name, "Arn")))))),
             Action = Seq(
               "kms:Decrypt",
               "kms:DescribeKey"
@@ -73,7 +73,7 @@ object Stack {
           PolicyStatement(
             Sid = Option("CloudFormationDeploymentRoleOwnsKey"),
             Effect = "Allow",
-            Principal = Option(DefinedPrincipal(Map("AWS" → Seq(`Fn::Sub`("arn:aws:iam::${AWS::AccountId}:role/cloudformation/deployer/cloudformation-deployer"))))),
+            Principal = Option(DefinedPrincipal(Map("AWS" -> Seq(`Fn::Sub`("arn:aws:iam::${AWS::AccountId}:role/cloudformation/deployer/cloudformation-deployer"))))),
             Action = Seq(
               "kms:Create*",
               "kms:Describe*",

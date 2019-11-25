@@ -55,7 +55,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
         override def getZoneId(domain: String): Stream[IO, ZoneId] =
           domain match {
             case "zone" => Stream.emit("zone-id").map(shapeless.tag[ZoneIdTag][String])
-            case _ => Stream.raiseError(AccessDenied())
+            case _ => Stream.raiseError[IO](AccessDenied())
           }
       }
       private val processor = buildProcessor(fakeRateLimitClient, fakeZoneClient)
@@ -69,7 +69,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("created" → rateLimit.copy(id = Option(rateLimitId)).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = Option(rateLimitId)).asJson)
       })
     }
 
@@ -82,7 +82,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
         override def getZoneId(domain: String): Stream[IO, ZoneId] =
           domain match {
             case "zone" => Stream.emit("zone-id").map(shapeless.tag[ZoneIdTag][String])
-            case _ => Stream.raiseError(AccessDenied())
+            case _ => Stream.raiseError[IO](AccessDenied())
           }
       }
       private val processor = buildProcessor(fakeRateLimitClient, fakeZoneClient)
@@ -96,7 +96,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown RateLimit ID"
-          handlerResponse.data must haveKeyValuePair("created" → rateLimit.copy(id = None).asJson)
+          handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = None).asJson)
       })
     }
 
@@ -128,7 +128,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("updated" → rateLimit.asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
 
@@ -146,7 +146,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("updated" → rateLimit.asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
 
@@ -189,7 +189,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
-          handlerResponse.data must haveKeyValuePair("deleted" → rateLimitId.asJson)
+          handlerResponse.data must haveKeyValuePair("deleted" -> rateLimitId.asJson)
       })
     }
 
@@ -231,9 +231,9 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
 }
 
 class FakeRateLimitClient extends RateLimitClient[IO] {
-  override def list(zoneId: ZoneId): Stream[IO, RateLimit] = Stream.raiseError(new NotImplementedError())
-  override def getById(zoneId: ZoneId, rateLimitId: String): Stream[IO, RateLimit] = Stream.raiseError(new NotImplementedError())
-  override def create(zoneId: ZoneId, rateLimit: ratelimits.RateLimit): Stream[IO, RateLimit] = Stream.raiseError(new NotImplementedError())
-  override def update(zoneId: ZoneId, rateLimit: ratelimits.RateLimit): Stream[IO, RateLimit] = Stream.raiseError(new NotImplementedError())
-  override def delete(zoneId: ZoneId, rateLimitId: String): Stream[IO, RateLimitId] = Stream.raiseError(new NotImplementedError())
+  override def list(zoneId: ZoneId): Stream[IO, RateLimit] = Stream.raiseError[IO](new NotImplementedError())
+  override def getById(zoneId: ZoneId, rateLimitId: String): Stream[IO, RateLimit] = Stream.raiseError[IO](new NotImplementedError())
+  override def create(zoneId: ZoneId, rateLimit: ratelimits.RateLimit): Stream[IO, RateLimit] = Stream.raiseError[IO](new NotImplementedError())
+  override def update(zoneId: ZoneId, rateLimit: ratelimits.RateLimit): Stream[IO, RateLimit] = Stream.raiseError[IO](new NotImplementedError())
+  override def delete(zoneId: ZoneId, rateLimitId: String): Stream[IO, RateLimitId] = Stream.raiseError[IO](new NotImplementedError())
 }
