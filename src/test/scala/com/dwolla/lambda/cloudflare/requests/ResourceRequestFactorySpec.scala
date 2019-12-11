@@ -18,7 +18,10 @@ import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 
+
 class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specification with Mockito with IOMatchers {
+  implicit val ioContextShift = IO.contextShift(ee.executionContext)
+  
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
 
