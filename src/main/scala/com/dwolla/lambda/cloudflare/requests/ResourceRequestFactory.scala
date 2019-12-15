@@ -38,6 +38,7 @@ object ResourceRequestFactory {
       "Custom::CloudflareAccountMembership" -> Reader(new AccountMembership(_)),
       "Custom::CloudflarePageRule" -> Reader(new PageRuleProcessor(_)),
       "Custom::CloudflareRateLimit" -> Reader(new RateLimitProcessor(_)),
+      "Custom::CloudflareFirewallRule" -> Reader(new FirewallRuleProcessor(_))
     )
 
     val processorFor: Kleisli[F, ResourceType, ProcessorReader] = Kleisli { resourceType =>

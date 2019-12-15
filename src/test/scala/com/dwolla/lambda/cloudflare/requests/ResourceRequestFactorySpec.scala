@@ -105,6 +105,14 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
       output must returnValue(haveClass[PageRuleProcessor[IO]])
     }
 
+    "return a FirewallRuleProcessor for the CloudflareFirewallRule custom type" in new Setup {
+      val factory = new ResourceRequestFactoryImpl[IO](mockClient, mockKms)
+
+      private val output = factory.processorFor("Custom::CloudflareFirewallRule".asInstanceOf[ResourceType]).map(_(mockExecutor))
+
+      output must returnValue(haveClass[FirewallRuleProcessor[IO]])
+    }
+
   }
 
   private def buildRequest(resourceType: ResourceType, resourceProperties: Option[JsonObject] = None) =
