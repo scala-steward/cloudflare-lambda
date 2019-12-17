@@ -18,7 +18,10 @@ import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 
+
 class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specification with Mockito with IOMatchers {
+  implicit val ioContextShift = IO.contextShift(ee.executionContext)
+  
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
 
@@ -100,6 +103,14 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
       private val output = factory.processorFor("Custom::CloudflarePageRule".asInstanceOf[ResourceType]).map(_(mockExecutor))
 
       output must returnValue(haveClass[PageRuleProcessor[IO]])
+    }
+
+    "return a FirewallRuleProcessor for the CloudflareFirewallRule custom type" in new Setup {
+      val factory = new ResourceRequestFactoryImpl[IO](mockClient, mockKms)
+
+      private val output = factory.processorFor("Custom::CloudflareFirewallRule".asInstanceOf[ResourceType]).map(_(mockExecutor))
+
+      output must returnValue(haveClass[FirewallRuleProcessor[IO]])
     }
 
   }
