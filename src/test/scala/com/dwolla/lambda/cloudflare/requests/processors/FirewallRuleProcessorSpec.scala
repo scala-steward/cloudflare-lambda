@@ -25,6 +25,8 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
   trait Setup extends Scope {
     val zoneId = "zone-id".asInstanceOf[ZoneId]
     val firewallRuleId = "firewall-rule-id".asInstanceOf[FirewallRuleId]
+    val filterId = "filter-id".asInstanceOf[FirewallRuleFilterId]
+
     val firewallRule = FirewallRule(
       id = None,
       filter = FirewallRuleFilter(
@@ -108,8 +110,32 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
   }
 
   "processing Updates" should {
-    "handle a normal update request successfully" in new Setup {
+    "handle a normal update request successfully when the request's filter contains an id" in new Setup {
       private val fakeFirewallRuleClient = new FakeFirewallRuleClient {
+        override def update(zoneId: ZoneId, firewallRule: FirewallRule): Stream[IO, FirewallRule] =
+          Stream.emit(firewallRule.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)))
+      }
+      private val processor = buildProcessor(fakeFirewallRuleClient)
+      private val firewallRuleWithId = firewallRule.copy(
+        id = Option(firewallRuleId),
+        filter = firewallRule.filter.copy(id = Option(filterId))
+      )
+
+      private val output = processor.process(UpdateRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
+        "FirewallRule" -> firewallRuleWithId.asJson,
+      ))
+
+      output.compile.last must returnValue(beSome[HandlerResponse].like {
+        case handlerResponse =>
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
+      })
+    }
+
+    "handle a normal update request successfully when the request's filter contains no id" in new Setup {
+      private val fakeFirewallRuleClient = new FakeFirewallRuleClient {
+        override def getById(zoneId: ZoneId, firewallRuleId: String): Stream[IO, FirewallRule] =
+          Stream.emit(firewallRule.copy(filter = firewallRule.filter.copy(id = Option(filterId))))
         override def update(zoneId: ZoneId, firewallRule: FirewallRule): Stream[IO, FirewallRule] =
           Stream.emit(firewallRule.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)))
       }
@@ -123,7 +149,9 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
       output.compile.last must returnValue(beSome[HandlerResponse].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
-          handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
+          handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(
+            filter = firewallRuleWithId.filter.copy(id = Option(filterId)),
+            modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
 
@@ -133,7 +161,10 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
           Stream.emit(firewallRule.copy(id = None, modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)))
       }
       private val processor = buildProcessor(fakeFirewallRuleClient)
-      private val firewallRuleWithId = firewallRule.copy(id = Option(firewallRuleId))
+      private val firewallRuleWithId = firewallRule.copy(
+        id = Option(firewallRuleId),
+        filter = firewallRule.filter.copy(id = Option(filterId))
+      )
 
       private val output = processor.process(UpdateRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,

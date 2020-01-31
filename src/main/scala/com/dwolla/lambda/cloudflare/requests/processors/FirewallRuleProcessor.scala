@@ -49,7 +49,8 @@ class FirewallRuleProcessor[F[_] : Sync](zoneClient: ZoneClient[F], firewallRule
 
   private def handleUpdate(zoneId: ZoneId, firewallRuleId: FirewallRuleId, request: FirewallRule): Stream[F, HandlerResponse] =
     for {
-      resp <- firewallRuleClient.update(zoneId, request.copy(id = Option(firewallRuleId)))
+      filterId <- if (request.filter.id.isEmpty) firewallRuleClient.getById(zoneId, firewallRuleId).map(_.filter.id) else Stream.emit(request.filter.id)
+      resp <- firewallRuleClient.update(zoneId, request.copy(id = Option(firewallRuleId), filter = request.filter.copy(id = filterId)))
     } yield HandlerResponse(tagPhysicalResourceId(firewallRuleClient.buildUri(zoneId, resp.id.getOrElse(firewallRuleId))), JsonObject(
       "updated" -> resp.asJson
     ))
