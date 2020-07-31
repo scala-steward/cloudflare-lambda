@@ -28,7 +28,7 @@ lazy val root = (project in file("."))
         "com.dwolla" %% "scala-cloudformation-custom-resource" % "4.0.0-M2",
         "com.dwolla" %% "fs2-aws" % "2.0.0-M5",
         "io.circe" %% "circe-fs2" % "0.12.0",
-        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M10",
+        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M13",
         "org.http4s" %% "http4s-blaze-client" % "0.21.0-M5",
         "com.amazonaws" % "aws-java-sdk-kms" % awsSdkVersion,
         "org.apache.httpcomponents" % "httpclient" % "4.5.2",
