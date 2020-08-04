@@ -5,6 +5,7 @@ import java.time.Instant
 import cats.effect._
 import com.dwolla.cloudflare.domain.model._
 import com.dwolla.cloudflare.domain.model.firewallrules._
+import com.dwolla.cloudflare.domain.model.filters._
 import com.dwolla.cloudflare.{FirewallRuleClient, ZoneClient}
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
@@ -25,14 +26,14 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
   trait Setup extends Scope {
     val zoneId = "zone-id".asInstanceOf[ZoneId]
     val firewallRuleId = "firewall-rule-id".asInstanceOf[FirewallRuleId]
-    val filterId = "filter-id".asInstanceOf[FirewallRuleFilterId]
+    val filterId = "filter-id".asInstanceOf[FilterId]
 
     val firewallRule = FirewallRule(
       id = None,
       filter = FirewallRuleFilter(
         id = None,
-        expression = shapeless.tag[FirewallRuleFilterExpressionTag][String]("(cf.bot_management.score lt 30)"),
-        paused = false),
+        expression = Option(shapeless.tag[FilterExpressionTag][String]("(cf.bot_management.score lt 30)")),
+        paused = Option(false)),
       action = Action.Log,
       priority = shapeless.tag[FirewallRulePriorityTag][Int](1),
       paused = false
