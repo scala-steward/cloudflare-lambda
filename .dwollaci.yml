@@ -1,0 +1,15 @@
+stages:
+  build:
+    nodeLabel: sbt
+    steps:
+      - /bin/true
+    filesToStash:
+      - '**'
+  deployProd:
+    nodeLabel: sbt-deployer
+    steps:
+      - |
+        sbt \
+          -DAWS_ACCOUNT_ID=455620323323 \
+          publish \
+          stack/deploy
