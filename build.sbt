@@ -10,7 +10,7 @@ lazy val commonSettings = Seq(
 
 lazy val specs2Version = "4.8.1"
 lazy val awsSdkVersion = "1.11.354"
-lazy val scalaAwsUtilsVersion = "1.6.1"
+lazy val scalaAwsUtilsVersion = "1.6.2"
 
 lazy val root = (project in file("."))
   .settings(
@@ -24,10 +24,10 @@ lazy val root = (project in file("."))
         "org.typelevel" %% "cats-core" % "2.0.0",
         "org.typelevel" %% "cats-effect" % "2.0.0",
         "com.chuusai" %% "shapeless" % "2.3.3",
-        "com.dwolla" %% "scala-cloudformation-custom-resource" % "4.0.0-M2",
-        "com.dwolla" %% "fs2-aws" % "2.0.0-M5",
+        "com.dwolla" %% "scala-cloudformation-custom-resource" % "4.0.0-M3",
+        "com.dwolla" %% "fs2-aws" % "2.0.0-M12",
         "io.circe" %% "circe-fs2" % "0.12.0",
-        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M13",
+        "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M14",
         "org.http4s" %% "http4s-blaze-client" % "0.21.0-M5",
         "com.amazonaws" % "aws-java-sdk-kms" % awsSdkVersion,
         "org.apache.httpcomponents" % "httpclient" % "4.5.2",
@@ -35,7 +35,7 @@ lazy val root = (project in file("."))
         "org.specs2" %% "specs2-mock" % specs2Version % Test,
         "org.specs2" %% "specs2-matcher-extra" % specs2Version % Test,
         "org.specs2" %% "specs2-cats" % specs2Version % Test,
-        "com.dwolla" %% "testutils-specs2" % "2.0.0-M3" % Test exclude("ch.qos.logback", "logback-classic")
+        "com.dwolla" %% "testutils-specs2" % "2.0.0-M6" % Test exclude("ch.qos.logback", "logback-classic")
       )
     },
   )

@@ -2,7 +2,11 @@ stages:
   build:
     nodeLabel: sbt
     steps:
-      - /bin/true
+      - |
+        sbt \
+          clean \
+          stack/clean \
+          stack/test
     filesToStash:
       - '**'
   deployProd:
