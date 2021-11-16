@@ -7,11 +7,20 @@ stages:
           clean \
           stack/clean \
           stack/test
+      - |
+        # sbt-s3-publisher assumes it is being run on a git repo.
+        # However, by default the .git directory is to included as
+        # part of what stashed by Jenkins. We workaround this by
+        # copying the contents of the .git directory into another
+        # directory that is stashed by Jenkins and then rename it
+        # to .git when running sbt-s3-publisher.
+        cp -r .git git 
     filesToStash:
       - '**'
   deployProd:
     nodeLabel: sbt-deployer
     steps:
+      - mv git .git
       - |
         sbt \
           -DAWS_ACCOUNT_ID=455620323323 \
