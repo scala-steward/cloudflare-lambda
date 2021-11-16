@@ -16,7 +16,6 @@ lazy val root = (project in file("."))
   .settings(
     name := "cloudflare-lambda",
     resolvers ++= Seq(
-      Resolver.bintrayRepo("dwolla", "maven"),
       Resolver.mavenLocal
     ),
     libraryDependencies ++= {
