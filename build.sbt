@@ -50,7 +50,7 @@ lazy val stack: Project = (project in file("stack"))
     resolvers ++= Seq(Resolver.jcenterRepo),
     libraryDependencies ++= {
       Seq(
-        "com.monsanto.arch" %% "cloud-formation-template-generator" % "3.10.0",
+        "com.monsanto.arch" %% "cloud-formation-template-generator" % "3.10.2",
         "org.specs2" %% "specs2-core" % specs2Version % "test,it",
         "com.amazonaws" % "aws-java-sdk-cloudformation" % awsSdkVersion % IntegrationTest,
         "com.dwolla" %% "scala-aws-utils" % scalaAwsUtilsVersion % IntegrationTest withSources()
