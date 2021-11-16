@@ -106,7 +106,7 @@ object Stack {
       Description = Option("Manages settings at Cloudflare"),
       Handler = classOf[CloudflareHandler].getName,
       Runtime = Java8,
-      MemorySize = Some(512),
+      MemorySize = Some(1024),
       Role = `Fn::GetAtt`(Seq(role.name, "Arn")),
       Timeout = Some(60)
     )
