@@ -9,7 +9,7 @@ stages:
           stack/test
       - |
         # sbt-s3-publisher assumes it is being run on a git repo.
-        # However, by default the .git directory is to included as
+        # However, by default the .git directory is not included as
         # part of what stashed by Jenkins. We workaround this by
         # copying the contents of the .git directory into another
         # directory that is stashed by Jenkins and then rename it
@@ -23,6 +23,7 @@ stages:
       - mv git .git
       - |
         sbt \
+          -DDWOLLA_CODE_BUCKET=dwolla-code \
           -DAWS_ACCOUNT_ID=455620323323 \
           publish \
           stack/deploy
