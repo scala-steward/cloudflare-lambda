@@ -22,8 +22,7 @@ stages:
     steps:
       - mv git .git
       - |
-        sbt \
-          -DDWOLLA_CODE_BUCKET=dwolla-code \
+        DWOLLA_CODE_BUCKET=dwolla-code sbt \
           -DAWS_ACCOUNT_ID=455620323323 \
           publish \
           stack/deploy
