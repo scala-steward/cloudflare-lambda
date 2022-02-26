@@ -6,19 +6,20 @@ import com.dwolla.cloudflare.domain.model.filters._
 import _root_.io.circe._
 import _root_.io.circe.syntax._
 import cats.effect._
+import cats.effect.testing.specs2.CatsEffect
 import com.dwolla.circe._
 import com.dwolla.cloudflare.domain.model.Exceptions.AccessDenied
 import com.dwolla.cloudflare.{FilterClient, ZoneClient}
 import com.dwolla.lambda.cloudflare.Exceptions._
 import com.dwolla.lambda.cloudflare.JsonObjectMatchers
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
-import com.dwolla.lambda.cloudformation._
+import feral.lambda.cloudformation._
+import feral.lambda.cloudformation.CloudFormationRequestType._
 import org.specs2.matcher.IOMatchers
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 
 //noinspection Specs2Matchers
-class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectMatchers {
+class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectMatchers with CatsEffect {
 
   trait Setup extends Scope {
     val zoneId = "zone-id".asInstanceOf[ZoneId]
@@ -55,9 +56,9 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId)
+          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId).renderString
           handlerResponse.data must haveKeyValuePair("created" -> filter.copy(id = Option(filterId)).asJson)
       })
     }
@@ -81,7 +82,7 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown Filter ID"
           handlerResponse.data must haveKeyValuePair("created" -> filter.copy(id = None).asJson)
@@ -91,12 +92,12 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
     "fail to create if a physical resource ID has already been specified" in new Setup {
       private val processor = buildProcessor()
 
-      private val output = processor.process(CreateRequest, Option("physical-resource-id").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(CreateRequest, PhysicalResourceId("physical-resource-id"), JsonObject(
         "Filter" -> filter.asJson,
         "ZoneId" -> "zone-id".asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId("physical-resource-id"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId(PhysicalResourceId.unsafeApply("physical-resource-id")))))
     }
   }
 
@@ -108,14 +109,14 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
       }
       private val processor = buildProcessor(fakeFilterClient)
 
-      private val output = processor.process(UpdateRequest, Option(fakeFilterClient.buildUri(zoneId, filterId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeFilterClient.buildUri(zoneId, filterId).renderString), JsonObject(
         "Filter" -> filter.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId)
-          handlerResponse.data must haveKeyValuePair("updated" -> filter.asJson)
+          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId).renderString
+          handlerResponse.data must haveKeyValuePair( "updated" -> filter.asJson)
       })
     }
 
@@ -126,13 +127,13 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
       }
       private val processor = buildProcessor(fakeFilterClient)
 
-      private val output = processor.process(UpdateRequest, Option(fakeFilterClient.buildUri(zoneId, filterId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeFilterClient.buildUri(zoneId, filterId).renderString), JsonObject(
         "Filter" -> filter.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId)
+          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> filter.copy(id = None).asJson)
       })
     }
@@ -143,11 +144,11 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
       }
       private val processor = buildProcessor(fakeFilterClient)
 
-      private val output = processor.process(UpdateRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "Filter" -> filter.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {
@@ -169,13 +170,13 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
       }
       private val processor = buildProcessor(fakeFilterClient)
 
-      private val output = processor.process(DeleteRequest, Option(fakeFilterClient.buildUri(zoneId, filterId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId(fakeFilterClient.buildUri(zoneId, filterId).renderString), JsonObject(
         "Filter" -> filter.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId)
+          handlerResponse.physicalId must_== fakeFilterClient.buildUri(zoneId, filterId).renderString
           handlerResponse.data must haveKeyValuePair("deleted" -> filterId.asJson)
       })
     }
@@ -186,11 +187,11 @@ class FilterProcessorSpec extends Specification with IOMatchers with JsonObjectM
       }
       private val processor = buildProcessor(fakeFilterClient)
 
-      private val output = processor.process(DeleteRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "Filter" -> filter.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {

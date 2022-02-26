@@ -2,30 +2,32 @@ package com.dwolla.lambda.cloudflare.requests
 
 import _root_.fs2._
 import _root_.io.circe._
+import cats._
 import cats.data._
 import cats.effect._
+import cats.syntax.all._
 import com.dwolla.cloudflare.StreamingCloudflareApiExecutor
 import com.dwolla.fs2aws.kms._
+import com.dwolla.lambda.cloudflare.Exceptions.UnsupportedResourceType
 import com.dwolla.lambda.cloudflare.requests.ResourceRequestFactory.ResourceRequestFactoryImpl
 import com.dwolla.lambda.cloudflare.requests.processors._
-import com.dwolla.lambda.cloudformation._
+import feral.lambda.cloudformation._
 import org.http4s.HttpRoutes
 import org.http4s.client.Client
 import org.http4s.syntax.all._
-import org.specs2.concurrent.ExecutionEnv
 import org.specs2.matcher.IOMatchers
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
+import org.typelevel.log4cats.noop.NoOpLogger
 
+class ResourceRequestFactorySpec extends Specification with Mockito with IOMatchers {
+  private implicit def logger[F[_] : Applicative] = NoOpLogger[F]
 
-class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specification with Mockito with IOMatchers {
-  implicit val ioContextShift = IO.contextShift(ee.executionContext)
-  
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
 
-    val mockKms = new FakeKms(Map("CloudflareEmail" -> "cloudflare-account-email@dwollalabs.com", "CloudflareKey" -> "fake-key").transform((_, value) => value.getBytes("UTF-8")))
+    val mockKms = new FakeKms // (Map("CloudflareEmail" -> "cloudflare-account-email@dwollalabs.com", "CloudflareKey" -> "fake-key").transform((_, value) => value.getBytes("UTF-8")))
 
     val mockClient = Client.fromHttpApp(HttpRoutes.empty[IO].orNotFound)
 
@@ -34,15 +36,15 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
   "process" should {
     "decrypt credentials and send request to processor" in new Setup {
-      val request = buildRequest("Custom::Tester".asInstanceOf[ResourceType], Some(JsonObject(
+      val request = buildRequest("Custom::Tester".asInstanceOf[ResourceType], JsonObject(
         "CloudflareEmail" -> Json.fromString("cloudflare-account-email@dwollalabs.com"),
         "CloudflareKey" -> Json.fromString("fake-key")
-      )))
+      ))
 
-      private val response = HandlerResponse(tagPhysicalResourceId("1"))
+      private val response = HandlerResponse[Json](PhysicalResourceId.unsafeApply("1"), None)
       private val fakeProcessor = new ResourceRequestProcessor[IO] {
-        override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse] =
-          if (action != request.RequestType || physicalResourceId != request.PhysicalResourceId || properties != request.ResourceProperties.get)
+        override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse[Json]] =
+          if (action != request.RequestType || physicalResourceId != request.PhysicalResourceId || properties != request.ResourceProperties)
             Stream.raiseError[IO](new RuntimeException(s"unexpected arguments: ($action, $physicalResourceId, $properties)"))
           else
             Stream.emit(response)
@@ -68,14 +70,14 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
       private val output = factory.process(request)
 
-      output.unsafeToFuture() must throwA(UnsupportedResourceType(customResourceType)).await
+      output.attempt.map(_ must beLeft(UnsupportedResourceType(customResourceType)))
     }
 
     "throw exception if request missing ResourceProperties" in new Setup {
       val request = buildRequest("Custom::Tester".asInstanceOf[ResourceType])
 
       val fakeProcessor = new ResourceRequestProcessor[IO] {
-        override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse] = ???
+        override def process(action: CloudFormationRequestType, physicalResourceId: Option[PhysicalResourceId], properties: JsonObject): Stream[IO, HandlerResponse[Json]] = ???
       }
 
       val factory = new ResourceRequestFactoryImpl[IO](mockClient, mockKms) {
@@ -86,7 +88,7 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
       private val output = factory.process(request)
 
-      output.unsafeToFuture() must throwA(MissingResourceProperties).await
+      output.attempt.map(_ must_== Left(MissingResourceProperties))
     }
 
     "return a AccountMembership for the CloudflareAccountMembership custom type" in new Setup {
@@ -115,22 +117,20 @@ class ResourceRequestFactorySpec(implicit ee: ExecutionEnv) extends Specificatio
 
   }
 
-  private def buildRequest(resourceType: ResourceType, resourceProperties: Option[JsonObject] = None) =
-    CloudFormationCustomResourceRequest(
+  private def buildRequest(resourceType: ResourceType, resourceProperties: JsonObject = JsonObject.empty) =
+    CloudFormationCustomResourceRequest[JsonObject](
       RequestType = CloudFormationRequestType.CreateRequest,
-      ResponseURL = "",
+      ResponseURL = uri"https://dwolla.com",
       StackId = "".asInstanceOf[StackId],
       RequestId = "".asInstanceOf[RequestId],
       ResourceType = resourceType,
       LogicalResourceId = "".asInstanceOf[LogicalResourceId],
-      PhysicalResourceId = Some("1:4").map(tagPhysicalResourceId),
+      PhysicalResourceId = PhysicalResourceId("1:4"),
       ResourceProperties = resourceProperties,
       OldResourceProperties = None
     )
 }
 
-class FakeKms(decrypted: Map[String, Array[Byte]]) extends KmsDecrypter[IO] {
-  override def decryptBase64(cryptoTexts: (String, String)*): Stream[IO, Map[String, Array[Byte]]] = Stream.emit(decrypted)
-  override def decrypt[A](transformer: Transform[A], cryptoText: A): IO[Array[Byte]] = ???
-  override def decrypt[A](transform: Transform[A], cryptoTexts: (String, A)*): Stream[IO, Map[String, Array[Byte]]] = ???
+class FakeKms extends KmsAlg[IO] {
+  override def decrypt(string: String): IO[String] = string.reverse.pure[IO]
 }

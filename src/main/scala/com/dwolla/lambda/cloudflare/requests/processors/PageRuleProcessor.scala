@@ -1,25 +1,27 @@
 package com.dwolla.lambda.cloudflare
 package requests.processors
 
-import cats.effect._
+import cats._
+import cats.syntax.all._
+import com.dwolla.circe._
 import com.dwolla.cloudflare._
 import com.dwolla.cloudflare.domain.model.ZoneId
 import com.dwolla.cloudflare.domain.model.pagerules.{PageRule, PageRuleId}
-import com.dwolla.lambda.cloudformation._
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
+import com.dwolla.lambda.cloudflare.Exceptions._
+import com.dwolla.lambda.cloudflare.requests.processors.ResourceRequestProcessor.physicalResourceIdFromUri
+import feral.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation._
 import fs2.Stream
 import io.circe._
 import io.circe.syntax._
-import com.dwolla.circe._
-import com.dwolla.lambda.cloudflare.Exceptions._
 
-class PageRuleProcessor[F[_] : Sync](zoneClient: ZoneClient[F], pageRuleClient: PageRuleClient[F]) extends ResourceRequestProcessor[F] {
+class PageRuleProcessor[F[_] : MonadThrow](zoneClient: ZoneClient[F], pageRuleClient: PageRuleClient[F]) extends ResourceRequestProcessor[F] {
 
   def this(executor: StreamingCloudflareApiExecutor[F]) = this(ZoneClient(executor), PageRuleClient(executor))
 
   override def process(action: CloudFormationRequestType,
                        physicalResourceId: Option[PhysicalResourceId],
-                       properties: JsonObject): Stream[F, HandlerResponse] =
+                       properties: JsonObject): Stream[F, HandlerResponse[Json]] =
     for {
       request <- parseRecordFrom[PageRule](properties, "PageRule")
       resp <- handleAction(action, request, physicalResourceId, properties)
@@ -29,41 +31,44 @@ class PageRuleProcessor[F[_] : Sync](zoneClient: ZoneClient[F], pageRuleClient: 
                            request: PageRule,
                            physicalResourceId: Option[PhysicalResourceId],
                            properties: JsonObject,
-                          ): Stream[F, HandlerResponse] = (action, physicalResourceId) match {
+                          ): Stream[F, HandlerResponse[Json]] = (action, physicalResourceId) match {
     case (CreateRequest, None) => handleCreate(request, properties)
-    case (UpdateRequest, PhysicalResourceId(zid, prid)) => handleUpdate(zid, prid, request)
-    case (DeleteRequest, PhysicalResourceId(zid, prid)) => handleDelete(zid, prid)
+    case (UpdateRequest, ZoneAndPageRuleId(zid, prid)) => handleUpdate(zid, prid, request)
+    case (DeleteRequest, ZoneAndPageRuleId(zid, prid)) => handleDelete(zid, prid)
     case (CreateRequest, Some(id)) => Stream.raiseError(UnexpectedPhysicalId(id))
-    case (_, Some(id)) => Stream.raiseError(InvalidCloudflareUri(id))
+    case (_, Some(id)) => Stream.raiseError(InvalidCloudflareUri(id.some))
     case (UpdateRequest, None) | (DeleteRequest, None) => Stream.raiseError(MissingPhysicalId(action))
     case (OtherRequestType(_), _) => Stream.raiseError(UnsupportedRequestType(action))
   }
 
-  private def handleCreate(request: PageRule, properties: JsonObject): Stream[F, HandlerResponse] =
+  private def handleCreate(request: PageRule, properties: JsonObject): Stream[F, HandlerResponse[Json]] =
     for {
       zone <- parseRecordFrom[String](properties, "Zone")
       zoneId <- zoneClient.getZoneId(zone)
       resp <- pageRuleClient.create(zoneId, request)
-    } yield HandlerResponse(tagPhysicalResourceId(resp.id.fold("Unknown PageRule ID")(id => pageRuleClient.buildUri(zoneId, id))), JsonObject(
+      id <- resp.id.fold(PhysicalResourceId.unsafeApply("Unknown PageRule ID").pure[Stream[F, *]])(id => physicalResourceIdFromUri[Stream[F, *]](pageRuleClient.buildUri(zoneId, id)))
+    } yield HandlerResponse(id, Json.obj(
       "created" -> resp.asJson
-    ))
+    ).some)
 
-  private def handleUpdate(zoneId: ZoneId, pageRuleId: PageRuleId, request: PageRule): Stream[F, HandlerResponse] =
+  private def handleUpdate(zoneId: ZoneId, pageRuleId: PageRuleId, request: PageRule): Stream[F, HandlerResponse[Json]] =
     for {
       resp <- pageRuleClient.update(zoneId, request.copy(id = Option(pageRuleId)))
-    } yield HandlerResponse(tagPhysicalResourceId(pageRuleClient.buildUri(zoneId, resp.id.getOrElse(pageRuleId))), JsonObject(
+      id <- physicalResourceIdFromUri[Stream[F, *]](pageRuleClient.buildUri(zoneId, resp.id.getOrElse(pageRuleId)))
+    } yield HandlerResponse(id, Json.obj(
       "updated" -> resp.asJson
-    ))
+    ).some)
 
-  private def handleDelete(zoneId: ZoneId, pageRuleId: PageRuleId): Stream[F, HandlerResponse] =
+  private def handleDelete(zoneId: ZoneId, pageRuleId: PageRuleId): Stream[F, HandlerResponse[Json]] =
     for {
       resp <- pageRuleClient.delete(zoneId, pageRuleId)
-    } yield HandlerResponse(tagPhysicalResourceId(pageRuleClient.buildUri(zoneId, resp)), JsonObject(
+      id <- physicalResourceIdFromUri[Stream[F, *]](pageRuleClient.buildUri(zoneId, resp))
+    } yield HandlerResponse(id, Json.obj(
       "deleted" -> resp.asJson
-    ))
+    ).some)
 
-  private object PhysicalResourceId {
+  private object ZoneAndPageRuleId {
     def unapply(arg: Option[PhysicalResourceId]): Option[(ZoneId, PageRuleId)] =
-      arg.flatMap(pageRuleClient.parseUri)
+      arg.map(_.value).flatMap(pageRuleClient.parseUri)
   }
 }

@@ -4,9 +4,9 @@ import cats.effect._
 import org.http4s._
 import org.http4s.client.Client
 import org.http4s.client.middleware.Logger
-import org.http4s.syntax.all._
+import org.typelevel.ci._
 
 object CloudflareLoggingClient {
-  def apply[F[_]: Concurrent]: Client[F] => Client[F] =
-    Logger(logHeaders = true, logBody = true, (Headers.SensitiveHeaders + "X-Auth-Key".ci).contains)
+  def apply[F[_]: Async]: Client[F] => Client[F] =
+    Logger(logHeaders = true, logBody = true, (Headers.SensitiveHeaders + ci"X-Auth-Key").contains)
 }

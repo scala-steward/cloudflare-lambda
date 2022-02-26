@@ -1,6 +1,5 @@
-logLevel := Level.Warn
-addSbtPlugin("com.dwolla.sbt" %% "sbt-s3-publisher" % "1.3.2")
-addSbtPlugin("com.dwolla.sbt" %% "sbt-cloudformation-stack" % "1.3.1")
-addSbtPlugin("com.github.nomadblacky" % "sbt-assembly-log4j2" % "0.1.1")
-addSbtPlugin("com.dwijnand" % "sbt-travisci" % "1.1.3")
-addSbtPlugin("io.github.davidgregory084" % "sbt-tpolecat" % "0.1.8")
+addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.5.10")
+addSbtPlugin("io.github.davidgregory084" % "sbt-tpolecat" % "0.1.22")
+addSbtPlugin("com.codecommit" % "sbt-github-actions" % "0.14.2")
+addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.9")
+addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.10.0")

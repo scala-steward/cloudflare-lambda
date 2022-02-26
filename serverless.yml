@@ -1,0 +1,112 @@
+service: cloudflare-lambda
+useDotenv: true
+frameworkVersion: ^3.2.1
+
+provider:
+  name: aws
+  runtime: java11
+  memorySize: 1024
+  timeout: 60
+  region: us-west-2
+  stackName: cloudflare-lambda  # using a custom stack name to avoid removing and recreating the KMS key
+  deploymentBucket:
+    name: ${env:BUCKET}
+    serverSideEncryption: "AES256"
+  tracing:
+    lambda: true
+  iam:
+    deploymentRole: "arn:aws:iam::${env:ACCOUNT}:role/cloudformation/deployer/cloudformation-deployer"
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+           - route53:GetHostedZone
+          Resource: '*'
+  logRetentionInDays: 7
+  stackTags:
+    Creator: serverless
+    Environment: ${opt:stage}
+    Project: ${self:service}
+    Team: platform
+    Visibility: internal
+
+package:
+  artifact: ${env:ARTIFACT_PATH}
+
+functions:
+  Cloudflare:
+    handler: com.dwolla.lambda.cloudflare.Handler
+
+resources:
+  Description: cloudflare-lambda lambda function and supporting resources
+  Resources:
+    Key:
+      Properties:
+        Description: Encryption key protecting secrets for the Cloudflare lambda
+        EnableKeyRotation: true
+        Enabled: true
+        KeyPolicy:
+          Statement:
+            - Principal:
+                AWS:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/DataEncrypter
+              Resource:
+                - "*"
+              Sid: AllowDataEncrypterToEncrypt
+              Action:
+                - kms:Encrypt
+                - kms:ReEncrypt
+                - kms:Describe*
+                - kms:Get*
+                - kms:List*
+              Effect: Allow
+            - Principal:
+                AWS:
+                  - Fn::GetAtt:
+                      - IamRoleLambdaExecution
+                      - Arn
+              Resource:
+                - "*"
+              Sid: AllowLambdaToDecrypt
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Effect: Allow
+            - Principal:
+                AWS:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/cloudformation/deployer/cloudformation-deployer
+              Resource:
+                - "*"
+              Sid: CloudFormationDeploymentRoleOwnsKey
+              Action:
+                - kms:Create*
+                - kms:Describe*
+                - kms:Enable*
+                - kms:List*
+                - kms:Put*
+                - kms:Update*
+                - kms:Revoke*
+                - kms:Disable*
+                - kms:Get*
+                - kms:Delete*
+                - kms:ScheduleKeyDeletion
+                - kms:CancelKeyDeletion
+              Effect: Allow
+      Type: AWS::KMS::Key
+    KeyAlias:
+      Properties:
+        AliasName: alias/CloudflareKey
+        TargetKeyId:
+          Ref: Key
+      Type: AWS::KMS::Alias
+  Outputs:
+    CloudflareLambda:
+      Description: ARN of the Lambda that manages settings at Cloudflare
+      Value:
+        'Fn::GetAtt': [CloudflareLambdaFunction, Arn]
+      Export:
+        Name: CloudflareLambda
+    CloudflareKey:
+      Description: KMS Key Alias for Cloudflare lambda
+      Value:
+        Ref: KeyAlias

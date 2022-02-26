@@ -1,7 +1,6 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
 import java.time.Duration
-
 import cats.effect._
 import com.dwolla.cloudflare.domain.model._
 import com.dwolla.cloudflare.domain.model.ratelimits._
@@ -12,12 +11,12 @@ import fs2._
 import _root_.io.circe.syntax._
 import _root_.io.circe._
 import com.dwolla.lambda.cloudflare.Exceptions._
-import com.dwolla.lambda.cloudformation._
 import org.specs2.matcher.IOMatchers
 import com.dwolla.circe._
 import com.dwolla.cloudflare.domain.model.Exceptions.AccessDenied
 import com.dwolla.lambda.cloudflare.JsonObjectMatchers
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation._
 
 //noinspection Specs2Matchers
 class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObjectMatchers {
@@ -66,9 +65,9 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
+          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString
           handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = Option(rateLimitId)).asJson)
       })
     }
@@ -93,7 +92,7 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown RateLimit ID"
           handlerResponse.data must haveKeyValuePair("created" -> rateLimit.copy(id = None).asJson)
@@ -104,12 +103,12 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       private val processor = buildProcessor()
       private val rateLimitWithNoId = rateLimit.copy(id = None)
 
-      private val output = processor.process(CreateRequest, Option("physical-resource-id").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(CreateRequest, PhysicalResourceId("physical-resource-id"), JsonObject(
         "RateLimit" -> rateLimitWithNoId.asJson,
         "ZoneId" -> "zone-id".asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId("physical-resource-id"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId(PhysicalResourceId.unsafeApply("physical-resource-id")))))
     }
   }
 
@@ -121,13 +120,13 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       }
       private val processor = buildProcessor(fakeRateLimitClient)
 
-      private val output = processor.process(UpdateRequest, Option(fakeRateLimitClient.buildUri(zoneId, rateLimitId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString), JsonObject(
         "RateLimit" -> rateLimit.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
+          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
@@ -139,13 +138,13 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       }
       private val processor = buildProcessor(fakeRateLimitClient)
 
-      private val output = processor.process(UpdateRequest, Option(fakeRateLimitClient.buildUri(zoneId, rateLimitId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString), JsonObject(
         "RateLimit" -> rateLimit.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
+          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> rateLimit.asJson)
       })
     }
@@ -156,11 +155,11 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       }
       private val processor = buildProcessor(fakeRateLimitClient)
 
-      private val output = processor.process(UpdateRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "RateLimit" -> rateLimit.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {
@@ -182,13 +181,13 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       }
       private val processor = buildProcessor(fakeRateLimitClient)
 
-      private val output = processor.process(DeleteRequest, Option(fakeRateLimitClient.buildUri(zoneId, rateLimitId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId(fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString), JsonObject(
         "RateLimit" -> rateLimit.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId)
+          handlerResponse.physicalId must_== fakeRateLimitClient.buildUri(zoneId, rateLimitId).renderString
           handlerResponse.data must haveKeyValuePair("deleted" -> rateLimitId.asJson)
       })
     }
@@ -199,11 +198,11 @@ class RateLimitProcessorSpec extends Specification with IOMatchers with JsonObje
       }
       private val processor = buildProcessor(fakeRateLimitClient)
 
-      private val output = processor.process(DeleteRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "RateLimit" -> rateLimit.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {

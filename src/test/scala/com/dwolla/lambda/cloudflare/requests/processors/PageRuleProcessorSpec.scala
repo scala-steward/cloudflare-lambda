@@ -1,7 +1,6 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
 import java.time.Instant
-
 import cats.effect._
 import com.dwolla.cloudflare.domain.model._
 import com.dwolla.cloudflare.domain.model.pagerules._
@@ -12,12 +11,12 @@ import fs2._
 import _root_.io.circe.syntax._
 import _root_.io.circe._
 import com.dwolla.lambda.cloudflare.Exceptions._
-import com.dwolla.lambda.cloudformation._
 import org.specs2.matcher.IOMatchers
 import com.dwolla.circe._
 import com.dwolla.cloudflare.domain.model.Exceptions.AccessDenied
 import com.dwolla.lambda.cloudflare.JsonObjectMatchers
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation._
 
 //noinspection Specs2Matchers
 class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjectMatchers {
@@ -53,9 +52,9 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
+          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString
           handlerResponse.data must haveKeyValuePair("created" -> pageRule.copy(id = Option(pageRuleId)).asJson)
       })
     }
@@ -80,7 +79,7 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown PageRule ID"
           handlerResponse.data must haveKeyValuePair("created" -> pageRule.copy(id = None).asJson)
@@ -91,12 +90,12 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor()
       private val pageRule = PageRule(None, List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(CreateRequest, Option("physical-resource-id").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(CreateRequest, PhysicalResourceId("physical-resource-id"), JsonObject(
         "PageRule" -> pageRule.asJson,
         "ZoneId" -> "zone-id".asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId("physical-resource-id"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId(PhysicalResourceId.unsafeApply("physical-resource-id")))))
     }
   }
 
@@ -109,13 +108,13 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor(fakePageRuleClient)
       private val pageRule = PageRule(Option(pageRuleId), List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(UpdateRequest, Option(fakePageRuleClient.buildUri(zoneId, pageRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString), JsonObject(
         "PageRule" -> pageRule.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
+          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> pageRule.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
@@ -128,13 +127,13 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor(fakePageRuleClient)
       private val pageRule = PageRule(Option(pageRuleId), List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(UpdateRequest, Option(fakePageRuleClient.buildUri(zoneId, pageRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString), JsonObject(
         "PageRule" -> pageRule.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
+          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> pageRule.copy(id = None, modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
@@ -146,11 +145,11 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor(fakePageRuleClient)
       private val pageRule = PageRule(Option(pageRuleId), List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(UpdateRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "PageRule" -> pageRule.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {
@@ -174,13 +173,13 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor(fakePageRuleClient)
       private val pageRule = PageRule(Option(pageRuleId), List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(DeleteRequest, Option(fakePageRuleClient.buildUri(zoneId, pageRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId(fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString), JsonObject(
         "PageRule" -> pageRule.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId)
+          handlerResponse.physicalId must_== fakePageRuleClient.buildUri(zoneId, pageRuleId).renderString
           handlerResponse.data must haveKeyValuePair("deleted" -> pageRuleId.asJson)
       })
     }
@@ -192,11 +191,11 @@ class PageRuleProcessorSpec extends Specification with IOMatchers with JsonObjec
       private val processor = buildProcessor(fakePageRuleClient)
       private val pageRule = PageRule(Option(pageRuleId), List.empty, List.empty, 1, PageRuleStatus.Active)
 
-      private val output = processor.process(DeleteRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "PageRule" -> pageRule.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {
