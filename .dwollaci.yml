@@ -12,4 +12,4 @@ stages:
         . ${NVM_DIR}/nvm.sh --no-use
         nvm install
         npm install -g npm && npm install -g serverless
-        sbt "deploy Admin"
+        sbt "prepare Admin" deploy
