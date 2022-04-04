@@ -2,27 +2,14 @@ stages:
   build:
     nodeLabel: sbt
     steps:
-      - |
-        sbt \
-          clean \
-          stack/clean \
-          stack/test
-      - |
-        # sbt-s3-publisher assumes it is being run on a git repo.
-        # However, by default the .git directory is not included as
-        # part of what stashed by Jenkins. We workaround this by
-        # copying the contents of the .git directory into another
-        # directory that is stashed by Jenkins and then rename it
-        # to .git when running sbt-s3-publisher.
-        cp -r .git git 
+      - sbt test universal:packageBin
     filesToStash:
       - '**'
   deployProd:
-    nodeLabel: sbt-deployer
+    nodeLabel: nvm-sbt-deployer
     steps:
-      - mv git .git
       - |
-        DWOLLA_CODE_BUCKET=dwolla-code sbt \
-          -DAWS_ACCOUNT_ID=455620323323 \
-          publish \
-          stack/deploy
+        . ${NVM_DIR}/nvm.sh --no-use
+        nvm install
+        npm install -g npm && npm install -g serverless
+        sbt "prepare Admin" deploy

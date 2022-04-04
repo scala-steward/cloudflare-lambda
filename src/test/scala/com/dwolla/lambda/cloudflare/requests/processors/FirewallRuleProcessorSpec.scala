@@ -1,7 +1,6 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
 import java.time.Instant
-
 import cats.effect._
 import com.dwolla.cloudflare.domain.model._
 import com.dwolla.cloudflare.domain.model.firewallrules._
@@ -13,12 +12,12 @@ import fs2._
 import _root_.io.circe.syntax._
 import _root_.io.circe._
 import com.dwolla.lambda.cloudflare.Exceptions._
-import com.dwolla.lambda.cloudformation._
 import org.specs2.matcher.IOMatchers
 import com.dwolla.circe._
 import com.dwolla.cloudflare.domain.model.Exceptions.AccessDenied
 import com.dwolla.lambda.cloudflare.JsonObjectMatchers
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation._
+import feral.lambda.cloudformation.CloudFormationRequestType._
 
 //noinspection Specs2Matchers
 class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonObjectMatchers {
@@ -65,9 +64,9 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString
           handlerResponse.data must haveKeyValuePair("created" -> firewallRule.copy(id = Option(firewallRuleId)).asJson)
       })
     }
@@ -91,7 +90,7 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
         "Zone" -> "zone".asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
           handlerResponse.physicalId must_== "Unknown FirewallRule ID"
           handlerResponse.data must haveKeyValuePair("created" -> firewallRule.copy(id = None).asJson)
@@ -101,12 +100,12 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
     "fail to create if a physical resource ID has already been specified" in new Setup {
       private val processor = buildProcessor()
 
-      private val output = processor.process(CreateRequest, Option("physical-resource-id").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(CreateRequest, PhysicalResourceId("physical-resource-id"), JsonObject(
         "FirewallRule" -> firewallRule.asJson,
         "ZoneId" -> "zone-id".asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId("physical-resource-id"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(UnexpectedPhysicalId(PhysicalResourceId.unsafeApply("physical-resource-id")))))
     }
   }
 
@@ -122,13 +121,13 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
         filter = firewallRule.filter.copy(id = Option(filterId))
       )
 
-      private val output = processor.process(UpdateRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
@@ -143,13 +142,13 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
       private val processor = buildProcessor(fakeFirewallRuleClient)
       private val firewallRuleWithId = firewallRule.copy(id = Option(firewallRuleId))
 
-      private val output = processor.process(UpdateRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(
             filter = firewallRuleWithId.filter.copy(id = Option(filterId)),
             modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
@@ -167,13 +166,13 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
         filter = firewallRule.filter.copy(id = Option(filterId))
       )
 
-      private val output = processor.process(UpdateRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString
           handlerResponse.data must haveKeyValuePair("updated" -> firewallRuleWithId.copy(id = None, modified_on = Option("2019-01-24T11:09:11.000000Z").map(Instant.parse)).asJson)
       })
     }
@@ -185,11 +184,11 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
       private val processor = buildProcessor(fakeFirewallRuleClient)
       private val firewallRuleWithId = firewallRule.copy(id = Option(firewallRuleId))
 
-      private val output = processor.process(UpdateRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(UpdateRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {
@@ -213,13 +212,13 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
       private val processor = buildProcessor(fakeFirewallRuleClient)
       private val firewallRuleWithId = firewallRule.copy(id = Option(firewallRuleId))
 
-      private val output = processor.process(DeleteRequest, Option(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)).map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId(fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.last must returnValue(beSome[HandlerResponse].like {
+      output.compile.last must returnValue(beSome[HandlerResponse[Json]].like {
         case handlerResponse =>
-          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId)
+          handlerResponse.physicalId must_== fakeFirewallRuleClient.buildUri(zoneId, firewallRuleId).renderString
           handlerResponse.data must haveKeyValuePair("deleted" -> firewallRuleId.asJson)
       })
     }
@@ -231,11 +230,11 @@ class FirewallRuleProcessorSpec extends Specification with IOMatchers with JsonO
       private val processor = buildProcessor(fakeFirewallRuleClient)
       private val firewallRuleWithId = firewallRule.copy(id = Option(firewallRuleId))
 
-      private val output = processor.process(DeleteRequest, Option("unparseable-value").map(tagPhysicalResourceId), JsonObject(
+      private val output = processor.process(DeleteRequest, PhysicalResourceId("unparseable-value"), JsonObject(
         "FirewallRule" -> firewallRuleWithId.asJson,
       ))
 
-      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri("unparseable-value"))))
+      output.compile.toList.attempt must returnValue(equalTo(Left(InvalidCloudflareUri(PhysicalResourceId("unparseable-value")))))
     }
 
     "raise an error when the physical resource id is missing" in new Setup {

@@ -1,30 +1,31 @@
 package com.dwolla.lambda.cloudflare.requests.processors
 
 import java.util.UUID
-
 import cats.effect._
 import com.dwolla.cloudflare.domain.model.accounts._
 import com.dwolla.cloudflare._
-import com.dwolla.lambda.cloudformation._
 import io.circe._
 import io.circe.syntax._
 import io.circe.generic.auto._
-import org.slf4j.Logger
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 import _root_.fs2._
+import cats.Applicative
+import cats.effect.testing.specs2.CatsEffect
 import com.dwolla.cloudflare.domain.model._
 import com.dwolla.lambda.cloudflare.Exceptions._
-import org.specs2.concurrent.ExecutionEnv
 import com.dwolla.circe._
 import com.dwolla.lambda.cloudflare.JsonObjectMatchers
-import com.dwolla.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation.CloudFormationRequestType._
+import feral.lambda.cloudformation._
+import org.typelevel.log4cats.noop.NoOpLogger
 
-class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification with Mockito with JsonObjectMatchers {
+class AccountMembershipSpec extends Specification with Mockito with JsonObjectMatchers with CatsEffect {
+  private implicit def logger[F[_] : Applicative] = NoOpLogger[F]
+
   trait Setup extends Scope {
     val mockExecutor = mock[StreamingCloudflareApiExecutor[IO]]
-    val mockLogger: Logger = mock[Logger]
 
     val badRole = AccountRole(
       id = UUID.randomUUID().toString,
@@ -35,12 +36,9 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
     val badRoleId: AccountRole => Boolean = _.id == badRole.id
 
-    def buildProcessor(log: Logger,
-                       fakeAccountsClient: AccountsClient[IO] = new FakeAccountsClient,
+    def buildProcessor(fakeAccountsClient: AccountsClient[IO] = new FakeAccountsClient,
                        fakeMembersClient: AccountMembersClient[IO] = new FakeAccountMembersClient): AccountMembership[IO] =
-      new AccountMembership(fakeAccountsClient, fakeMembersClient) {
-        override protected lazy val logger: Logger = log
-      }
+      new AccountMembership(fakeAccountsClient, fakeMembersClient)
   }
 
   "process Create/Update" should {
@@ -102,15 +100,20 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
           else Stream.emit(accountMember)
       }
 
-      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
+      val processor = buildProcessor(fakeAccountsClient, fakeAccountMembersClient)
 
-      private val output: Stream[IO, HandlerResponse] = processor.process(CreateRequest, None, resourceProperties)
-
-      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse =>
+      private val output: Stream[IO, HandlerResponse[Json]] = processor.process(CreateRequest, None, resourceProperties)
+      output.compile.last.attempt.map(_ must beRight.like {
+        case Some(handlerResponse) =>
           handlerResponse.physicalId must_== s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
           handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
-      }.await
+      })
+
+//      output.compile.last.attempt.map(_ must beRight[HandlerResponse[Json]].like {
+//        case handlerResponse =>
+//          handlerResponse.physicalId must_== s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId"
+//          handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
+//      })
     }
 
     "throw an exception if roles not found on Create" in new Setup {
@@ -142,11 +145,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def listRoles(accountId: AccountId): Stream[IO, AccountRole] = Stream.emits(accountRoles.toSeq)
       }
 
-      val processor = buildProcessor(mockLogger, fakeClient)
+      val processor = buildProcessor(fakeClient)
 
       private val output = processor.process(CreateRequest, None, resourceProperties)
 
-      output.compile.toList.unsafeToFuture() must throwA(MissingRoles(roleNames)).await
+      output.compile.toList.attempt.map(_ must_== Left(MissingRoles(roleNames)))
     }
 
     "process an Update action successfully" in new Setup {
@@ -154,7 +157,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id".asInstanceOf[AccountMemberId]
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -231,15 +234,15 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
       }
 
-      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
+      val processor = buildProcessor(fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(UpdateRequest, physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse =>
+      output.compile.last.attempt.map(_ must beRight.like {
+        case Some(handlerResponse) =>
           handlerResponse.physicalId must_== physicalResourceId.get
           handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
-      }.await
+      })
 
       val responseData = Json.obj(
         "accountMember" -> updatedAccountMember.asJson,
@@ -250,8 +253,6 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
 
       val request: AccountMembershipRequest =
         resourceProperties("AccountMember").toRight(MissingResourcePropertiesKey("AccountMember")).flatMap(_.as[AccountMembershipRequest](AccountMembership.accountMembershipRequestDecoder)).getOrElse(null)
-      there was one(mockLogger).info(s"$UpdateRequest $request")
-      there was one(mockLogger).info(s"Cloudflare AccountMembership response data: ${responseData.noSpaces}")
     }
 
     "throw an exception if accounts don't match on Update" in new Setup {
@@ -259,7 +260,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/fake-account-id2/members/$accountMemberId")
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/fake-account-id2/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -269,11 +270,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      val processor = buildProcessor(mockLogger)
+      val processor = buildProcessor()
 
-      private val output = processor.process(UpdateRequest, Some(physicalResourceId), resourceProperties)
+      private val output = processor.process(UpdateRequest, physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(AccountIdMismatch(accountId, physicalResourceId)).await
+      output.compile.last.attempt.map(_ must_== Left(AccountIdMismatch(accountId, physicalResourceId)))
     }
 
     "throw an exception if existing account member not found on Update" in new Setup {
@@ -281,7 +282,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -327,11 +328,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
       }
 
-      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
+      val processor = buildProcessor(fakeAccountsClient, fakeAccountMembersClient)
 
-      private val output = processor.process(UpdateRequest, Some(physicalResourceId), resourceProperties)
+      private val output = processor.process(UpdateRequest, (physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(AccountMemberNotFound(Some(physicalResourceId))).await
+      output.compile.last.attempt.map(_ must_== Left(AccountMemberNotFound((physicalResourceId))))
     }
 
     "throw an exception if email address changed on Update" in new Setup {
@@ -339,7 +340,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -398,11 +399,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
       }
 
-      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
+      val processor = buildProcessor(fakeAccountsClient, fakeAccountMembersClient)
 
-      private val output = processor.process(UpdateRequest, Some(physicalResourceId), resourceProperties)
+      private val output = processor.process(UpdateRequest, (physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(RefusingToChangeEmailAddress).await
+      output.compile.last.attempt.map(_ must_== Left(RefusingToChangeEmailAddress))
     }
 
     "throw an exception if roles not found on Update" in new Setup {
@@ -410,7 +411,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -469,11 +470,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.emit(originalAccountMember)
       }
 
-      val processor = buildProcessor(mockLogger, fakeAccountsClient, fakeAccountMembersClient)
+      val processor = buildProcessor(fakeAccountsClient, fakeAccountMembersClient)
 
       private val output = processor.process(UpdateRequest, physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(MissingRoles(roleNames)).await
+      output.compile.last.attempt.map(_ must_== Left(MissingRoles(roleNames)))
     }
 
     "throw an exception if invalid physical resource id format on Update" in new Setup {
@@ -481,7 +482,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = tagPhysicalResourceId("not-a-cloudflare-uri")
+      val physicalResourceId = PhysicalResourceId("not-a-cloudflare-uri")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -491,11 +492,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      val processor = buildProcessor(log = mockLogger)
+      val processor = buildProcessor()
 
-      private val output = processor.process(UpdateRequest, Some(physicalResourceId), resourceProperties)
+      private val output = processor.process(UpdateRequest, (physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareUri(physicalResourceId)).await
+      output.compile.last.attempt.map(_ must_== Left(InvalidCloudflareUri(physicalResourceId)))
     }
   }
 
@@ -506,7 +507,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -522,15 +523,15 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.emit(accountMemberId.asInstanceOf[AccountMemberId])
       }
 
-      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
+      val processor = buildProcessor(fakeMembersClient = client)
 
       private val output = processor.process(DeleteRequest, physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse =>
+      output.compile.last.attempt.map(_ must beRight.like {
+        case Some(handlerResponse) =>
           handlerResponse.physicalId must_== physicalResourceId.get
           handlerResponse.data must haveKeyValuePair("accountMemberId" -> accountMemberId.asJson)
-      }.await
+      })
     }
 
     "process a Delete action successfully even if existing account member not found" in new Setup {
@@ -538,7 +539,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -554,17 +555,15 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         override def removeMember(accountId: AccountId, accountMemberId: String) = Stream.raiseError[IO](AccountMemberDoesNotExistException(accountId, accountMemberId))
       }
 
-      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
+      val processor = buildProcessor(fakeMembersClient = client)
 
       private val output = processor.process(DeleteRequest, physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must beSome[HandlerResponse].like {
-        case handlerResponse =>
+      output.compile.last.attempt.map(_ must beRight.like {
+        case Some(handlerResponse) =>
           handlerResponse.physicalId must_== physicalResourceId.get
           handlerResponse.data must not(haveKeyValuePair("accountMemberId" -> accountMemberId.asJson))
-      }.await
-
-      there was one (mockLogger).error("The record could not be deleted because it did not exist; nonetheless, responding with Success!", AccountMemberDoesNotExistException(accountId, accountMemberId))
+      })
     }
 
     "throw an exception if invalid physical resource id format on Delete" in new Setup {
@@ -572,7 +571,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = tagPhysicalResourceId(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/$accountId/$accountMemberId")
 
       val resourceProperties = JsonObject(
         "AccountMember" -> Json.obj(
@@ -582,11 +581,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
         )
       )
 
-      private val processor = buildProcessor(mockLogger)
+      private val processor = buildProcessor()
 
-      private val output = processor.process(DeleteRequest, Some(physicalResourceId), resourceProperties)
+      private val output = processor.process(DeleteRequest, (physicalResourceId), resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(InvalidCloudflareUri(physicalResourceId)).await
+      output.compile.last.attempt.map(_ must_== Left(InvalidCloudflareUri(physicalResourceId)))
     }
 
   }
@@ -597,7 +596,7 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       val accountMemberId = "fake-account-member-id"
       val emailAddress = "test@test.com"
       val roleNames = List("Fake Role 1", "Fake Role 2", "Fake Role 3")
-      val physicalResourceId = Some(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId").map(tagPhysicalResourceId)
+      val physicalResourceId = PhysicalResourceId(s"https://api.cloudflare.com/client/v4/accounts/$accountId/members/$accountMemberId")
 
       val action = "BUILD"
       val resourceProperties = JsonObject(
@@ -611,11 +610,11 @@ class AccountMembershipSpec(implicit ee: ExecutionEnv) extends Specification wit
       private val client = new FakeAccountMembersClient() {
         override def getById(accountId: AccountId, accountMemberId: String) = Stream.empty
       }
-      val processor = buildProcessor(mockLogger, fakeMembersClient = client)
+      val processor = buildProcessor(fakeMembersClient = client)
 
       private val output = processor.process(OtherRequestType(action), physicalResourceId, resourceProperties)
 
-      output.compile.last.unsafeToFuture() must throwA(UnsupportedRequestType(OtherRequestType(action))).await
+      output.compile.last.attempt.map(_ must_== Left(UnsupportedRequestType(OtherRequestType(action))))
     }
 
   }
