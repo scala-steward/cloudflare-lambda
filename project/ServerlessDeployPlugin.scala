@@ -1,4 +1,3 @@
-import cats.syntax.either._
 import com.typesafe.sbt.packager.universal.UniversalPlugin
 import com.typesafe.sbt.packager.universal.UniversalPlugin.autoImport._
 import io.circe.yaml.parser
@@ -35,6 +34,24 @@ object ServerlessDeployPlugin extends AutoPlugin {
 
   override def requires: Plugins = UniversalPlugin
 
+  def parseServerlessProviderInfo(serverlessFile: String): Option[ServerlessProviderInfo] = {
+    for {
+      doc <- parser.parse(serverlessFile)
+      cursor = doc.hcursor.downField("provider")
+      region <- cursor.downField("region").as[String]
+      stackName <- cursor.downField("stackName").as[String]
+    } yield ServerlessProviderInfo(region, stackName)
+  }.toOption
+
+  def parseArtifactS3Path(cloudformationTemplate: String): Option[String] = {
+    for {
+      doc <- parser.parse(cloudformationTemplate)
+      cursor = doc.hcursor.downField("Resources").downField("Function").downField("Properties").downField("Code")
+      artifactS3Bucket <- cursor.downField("S3Bucket").as[String]
+      artifactS3Key <- cursor.downField("S3Key").as[String]
+    } yield s"s3://$artifactS3Bucket/$artifactS3Key"
+  }.toOption
+
   override lazy val projectSettings = Seq(
     serverlessPackageCommand := "serverless package --verbose".split(' ').toSeq,
     uploadToS3Command := "aws s3 cp".split(' ').toSeq,
@@ -67,42 +84,34 @@ object ServerlessDeployPlugin extends AutoPlugin {
         updatedCloudformationTemplate
       )
 
-      val stackNameCursor = for {
-        doc <- parser.parse(SbtIO.read((ThisBuild / baseDirectory).value / "serverless.yml"))
-        cursor = doc.hcursor
-        provider <- cursor.downField("provider").downField("stackName").as[String]
-      } yield provider
+      val serverlessProviderInfo = parseServerlessProviderInfo(SbtIO.read((ThisBuild / baseDirectory).value /
+        "serverless.yml")).getOrElse(throw new IllegalStateException("Unable to parse stack name and/or region from " +
+        "serverless.yml. Please verify they exist."))
 
-      val stackName = stackNameCursor.valueOr(_ => throw new IllegalStateException("Unable to parse stack name from " +
-        "serverless.yml. Please verify it exists."))
-
-      val artifactS3PathCursor = for {
-        doc <- parser.parse(updatedCloudformationTemplate)
-        cursor = doc.hcursor.downField("Resources").downField("Function").downField("Properties").downField("Code")
-        artifactS3Bucket <- cursor.downField("S3Bucket").as[String]
-        artifactS3Key <- cursor.downField("S3Key").as[String]
-      } yield (artifactS3Bucket, artifactS3Key)
-
-      val artifactS3Path = artifactS3PathCursor.valueOr(_ => throw new IllegalStateException("Unable to parse " +
-        "artifact S3 path. Please check the generated Cloudformation template in .serverless to verify it exists."))
+      val artifactS3Path = parseArtifactS3Path(updatedCloudformationTemplate).getOrElse(throw new
+          IllegalStateException ("Unable to parse artifact S3 path. Please check the generated Cloudformation " +
+            "template in .serverless to verify it exists."))
 
       val uploadToS3ExitCode = Process(
-        "aws s3 cp ".split(' ').toSeq ++ Seq(artifactPath, s"s3://${artifactS3Path._1}/${artifactS3Path._2}")
+        s"aws s3 cp --region ${serverlessProviderInfo.region}".split(' ').toSeq ++ Seq(artifactPath, artifactS3Path)
       ).!
 
       if (uploadToS3ExitCode != 0) throw new IllegalStateException("Failed to upload the artifact to S3.")
 
       val cloudformationExitCode = Process(
         cloudformationDeployCommand.value ++ Seq("--template-file", cloudformationTemplatePath.getPath) ++
-          s"--stack-name $stackName".split(' ').toSeq,
+          s"--stack-name ${serverlessProviderInfo.stackName} --region ${serverlessProviderInfo.region}".split(' ')
+            .toSeq,
         Option((ThisBuild / baseDirectory).value)
-      )!
+      ).!
 
       if (cloudformationExitCode == 0) cloudformationExitCode
-      else throw new IllegalStateException("Cloudformation returned a non-zero exit code ($cloudformationExitCode). " +
+      else throw new IllegalStateException(s"Cloudformation returned a non-zero exit code ($cloudformationExitCode). " +
         "Please check the logs for more information.")
     }.evaluated
   )
+
+  case class ServerlessProviderInfo(region: String, stackName: String)
 
   sealed abstract class Stage(val name: String) {
     val parser: Parser[this.type] = (Space ~> token(this.toString)).map(_ => this)
