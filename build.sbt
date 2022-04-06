@@ -46,7 +46,7 @@ lazy val root = (project in file("."))
         "com.chuusai" %% "shapeless" % "2.3.8",
         "io.circe" %% "circe-fs2" % "0.14.0",
         "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M15",
-        "org.http4s" %% "http4s-ember-client" % "0.23.10",
+        "org.http4s" %% "http4s-ember-client" % "0.23.11",
         "software.amazon.awssdk" % "kms" % awsJavaSdkVersion,
         "org.typelevel" %% "log4cats-slf4j" % "2.2.0",
         "org.typelevel" %% "log4cats-noop" % "2.2.0" % Test,
