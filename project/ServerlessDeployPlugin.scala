@@ -1,6 +1,8 @@
+
 import com.typesafe.sbt.packager.universal.UniversalPlugin
 import com.typesafe.sbt.packager.universal.UniversalPlugin.autoImport._
 import io.circe.yaml.parser
+import cats.syntax.either._
 import sbt.Keys.{baseDirectory, packageBin}
 import sbt.internal.util.complete.DefaultParsers._
 import sbt.internal.util.complete.Parser
@@ -15,16 +17,15 @@ import scala.sys.process._
 // created by Serverless (sbt-cloudformation-stack uses the logical name Function for the Lambda function, whereas
 // Serverless forces it to be CloudflareLambdaFunction.) Serverless offers no way to override this naming scheme.
 //
-// The Lambda function name is exported, so when the stack is updated if the Lambda function's logical name has
-// changed Cloudformation will not allow the update to proceed if the export is referenced by other stacks. The code
-// below addresses this by ensuring that even though we are using Serverless the logical name for the Lambda function
-// remains the same.
+// The Lambda function name is exported. So, when the stack is updated, if the Lambda function's logical name has
+// changed (or certain other properties of the lambda) Cloudformation will not allow the update to proceed if the export
+// is referenced by other stacks. The code below addresses this by ensuring that even though we are using Serverless
+// the logical name for the Lambda function remains the same.
 object ServerlessDeployPlugin extends AutoPlugin {
   object autoImport {
     val serverlessPackageCommand = settingKey[Seq[String]]("serverless command to package the application")
-    val uploadToS3Command = settingKey[Seq[String]]("command to upload cloudformation template to S3")
     val cloudformationDeployCommand = settingKey[Seq[String]]("cloudformation command to deploy the application")
-    val prepare = inputKey[Int]("package the Serverless service")
+    val prepare = inputKey[Unit]("package the Serverless service")
     val deploy = inputKey[Int]("deploy to AWS")
   }
 
@@ -33,6 +34,28 @@ object ServerlessDeployPlugin extends AutoPlugin {
   override def trigger: PluginTrigger = NoTrigger
 
   override def requires: Plugins = UniversalPlugin
+
+  def updateCloudformationTemplate(cloudformationTemplate: String) = {
+    val withLambdaLogicalNameReplaced = cloudformationTemplate.replaceAll("CloudflareLambdaFunction",
+      "Function")
+
+    val doc = parser.parse(withLambdaLogicalNameReplaced).valueOr(_ => throw new IllegalStateException("Unable to " +
+      "parse the generated Cloudformation template."))
+
+    val withFunctionNameDeleted = doc.hcursor.downField("Resources").downField("Function").downField("Properties")
+      .downField("FunctionName").delete.root
+    val withLambdaVersionDeleted = withFunctionNameDeleted.downField("Resources").withFocus(
+      _.mapObject(
+        _.filter {
+          case (_, v) => v.hcursor.downField("Type").as[String].map(_ != "AWS::Lambda::Version").getOrElse(true)
+        }
+      )
+    ).root
+    val withFunctionQualifiedArnOutputDeleted = withLambdaVersionDeleted.downField("Outputs")
+      .downField("FunctionQualifiedArn").delete.root
+
+    withFunctionQualifiedArnOutputDeleted.top.getOrElse(doc).spaces2
+  }
 
   def parseServerlessProviderInfo(serverlessFile: String): Option[ServerlessProviderInfo] = {
     for {
@@ -54,12 +77,13 @@ object ServerlessDeployPlugin extends AutoPlugin {
 
   override lazy val projectSettings = Seq(
     serverlessPackageCommand := "serverless package --verbose".split(' ').toSeq,
-    uploadToS3Command := "aws s3 cp".split(' ').toSeq,
     cloudformationDeployCommand := "aws cloudformation deploy --capabilities CAPABILITY_NAMED_IAM".split(' ').toSeq,
 
     prepare := Def.inputTask {
       val stage = Stage.parser.parsed.name.toLowerCase
       val artifactPath = (Universal / packageBin).value.toString
+      val cloudformationTemplatePath = (ThisBuild / baseDirectory).value /
+        ".serverless" / "cloudformation-template-update-stack.json"
 
       val serverlessExitCode = Process(
         serverlessPackageCommand.value ++ Seq("--stage", stage),
@@ -67,9 +91,13 @@ object ServerlessDeployPlugin extends AutoPlugin {
         "ARTIFACT_PATH" -> artifactPath,
       ).!
 
-      if (serverlessExitCode == 0) serverlessExitCode
-      else throw new IllegalStateException("Serverless returned a non-zero exit code. Please check the logs for more" +
-        " information.")
+      if (serverlessExitCode != 0) throw new IllegalStateException("Serverless returned a non-zero exit code. Please" +
+        " check the logs for more information.")
+
+      SbtIO.write(
+        cloudformationTemplatePath,
+        updateCloudformationTemplate(SbtIO.read(cloudformationTemplatePath))
+      )
     }.evaluated,
 
     deploy := Def.inputTask {
@@ -77,18 +105,11 @@ object ServerlessDeployPlugin extends AutoPlugin {
       val cloudformationTemplatePath = (ThisBuild / baseDirectory).value /
         ".serverless" / "cloudformation-template-update-stack.json"
 
-      val updatedCloudformationTemplate = SbtIO.read(cloudformationTemplatePath).replaceAll("CloudflareLambdaFunction",
-        "Function")
-      SbtIO.write(
-        cloudformationTemplatePath,
-        updatedCloudformationTemplate
-      )
-
       val serverlessProviderInfo = parseServerlessProviderInfo(SbtIO.read((ThisBuild / baseDirectory).value /
         "serverless.yml")).getOrElse(throw new IllegalStateException("Unable to parse stack name and/or region from " +
         "serverless.yml. Please verify they exist."))
 
-      val artifactS3Path = parseArtifactS3Path(updatedCloudformationTemplate).getOrElse(throw new
+      val artifactS3Path = parseArtifactS3Path(SbtIO.read(cloudformationTemplatePath)).getOrElse(throw new
           IllegalStateException ("Unable to parse artifact S3 path. Please check the generated Cloudformation " +
             "template in .serverless to verify it exists."))
 
