@@ -40,7 +40,7 @@ lazy val root = (project in file("."))
         "org.tpolecat" %% "natchez-xray" % natchezVersion,
         "org.tpolecat" %% "natchez-http4s" % "0.3.2",
         "com.dwolla" %% "fs2-aws-java-sdk2" % "3.0.0-RC1",
-        "co.fs2" %% "fs2-core" % "3.2.4",
+        "co.fs2" %% "fs2-core" % "3.2.7",
         "org.typelevel" %% "cats-core" % "2.7.0",
         "org.typelevel" %% "cats-effect" % "3.3.5",
         "com.chuusai" %% "shapeless" % "2.3.8",
