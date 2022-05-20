@@ -9,6 +9,8 @@ ThisBuild / githubWorkflowBuild := Seq(
   WorkflowStep.Sbt(List("test"), name = Option("Run tests")),
   WorkflowStep.Sbt(List("universal:packageBin"), name = Option("Package artifact")),
 )
+ThisBuild / githubWorkflowPublishTargetBranches := Seq.empty
+ThisBuild / githubWorkflowPublish := Seq.empty
 ThisBuild / developers := List(
   Developer(
     "bpholt",
