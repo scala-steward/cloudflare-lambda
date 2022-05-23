@@ -34,7 +34,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= {
       val natchezVersion = "0.1.6"
       val feralVersion = "0.1.0-M9"
-      val specs2Version = "4.13.2"
+      val specs2Version = "4.13.3"
       val awsJavaSdkVersion = "2.17.129"
 
       Seq(
@@ -44,14 +44,14 @@ lazy val root = (project in file("."))
         "com.dwolla" %% "fs2-aws-java-sdk2" % "3.0.0-RC1",
         "co.fs2" %% "fs2-core" % "3.2.7",
         "org.typelevel" %% "cats-core" % "2.7.0",
-        "org.typelevel" %% "cats-effect" % "3.3.5",
+        "org.typelevel" %% "cats-effect" % "3.3.12",
         "com.chuusai" %% "shapeless" % "2.3.9",
         "io.circe" %% "circe-fs2" % "0.14.0",
         "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M15",
-        "org.http4s" %% "http4s-ember-client" % "0.23.10",
+        "org.http4s" %% "http4s-ember-client" % "0.23.11",
         "software.amazon.awssdk" % "kms" % awsJavaSdkVersion,
-        "org.typelevel" %% "log4cats-slf4j" % "2.2.0",
-        "org.typelevel" %% "log4cats-noop" % "2.2.0" % Test,
+        "org.typelevel" %% "log4cats-slf4j" % "2.3.1",
+        "org.typelevel" %% "log4cats-noop" % "2.3.1" % Test,
         "org.specs2" %% "specs2-core" % specs2Version % Test,
         "org.specs2" %% "specs2-mock" % specs2Version % Test,
         "org.specs2" %% "specs2-matcher-extra" % specs2Version % Test,
