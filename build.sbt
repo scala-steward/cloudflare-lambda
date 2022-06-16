@@ -51,6 +51,8 @@ lazy val root = (project in file("."))
         "org.http4s" %% "http4s-ember-client" % "0.23.12",
         "software.amazon.awssdk" % "kms" % awsJavaSdkVersion,
         "org.typelevel" %% "log4cats-slf4j" % "2.3.1",
+        "com.amazonaws" % "aws-lambda-java-log4j2" % "1.5.1" % Runtime,
+        "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.17.2" % Runtime,
         "org.typelevel" %% "log4cats-noop" % "2.3.1" % Test,
         "org.specs2" %% "specs2-core" % specs2Version % Test,
         "org.specs2" %% "specs2-mock" % specs2Version % Test,
