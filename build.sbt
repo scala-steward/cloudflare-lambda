@@ -34,7 +34,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= {
       val natchezVersion = "0.1.6"
       val feralVersion = "0.1.0-M9"
-      val specs2Version = "4.15.0"
+      val specs2Version = "4.16.1"
       val awsJavaSdkVersion = "2.17.129"
 
       Seq(
