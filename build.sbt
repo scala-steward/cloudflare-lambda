@@ -43,7 +43,7 @@ lazy val root = (project in file("."))
         "org.tpolecat" %% "natchez-http4s" % "0.3.2",
         "com.dwolla" %% "fs2-aws-java-sdk2" % "3.0.0-RC1",
         "co.fs2" %% "fs2-core" % "3.2.7",
-        "org.typelevel" %% "cats-core" % "2.7.0",
+        "org.typelevel" %% "cats-core" % "2.8.0",
         "org.typelevel" %% "cats-effect" % "3.3.12",
         "com.chuusai" %% "shapeless" % "2.3.9",
         "io.circe" %% "circe-fs2" % "0.14.0",
@@ -60,7 +60,7 @@ lazy val root = (project in file("."))
         "org.specs2" %% "specs2-cats" % specs2Version % Test,
         "org.typelevel" %% "cats-effect-testing-specs2" % "1.4.0" % Test,
         "org.typelevel" %% "discipline-specs2" % "1.3.1" % Test,
-        "org.typelevel" %% "cats-laws" % "2.7.0" % Test,
+        "org.typelevel" %% "cats-laws" % "2.8.0" % Test,
       )
     },
   )
