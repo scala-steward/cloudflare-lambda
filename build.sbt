@@ -33,7 +33,7 @@ lazy val root = (project in file("."))
     maintainer := developers.value.head.email,
     libraryDependencies ++= {
       val natchezVersion = "0.1.6"
-      val feralVersion = "0.1.0-M9"
+      val feralVersion = "0.1.0-M13"
       val specs2Version = "4.15.0"
       val awsJavaSdkVersion = "2.17.129"
 
