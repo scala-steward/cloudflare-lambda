@@ -44,7 +44,7 @@ lazy val root = (project in file("."))
         "com.dwolla" %% "fs2-aws-java-sdk2" % "3.0.0-RC1",
         "co.fs2" %% "fs2-core" % "3.2.7",
         "org.typelevel" %% "cats-core" % "2.7.0",
-        "org.typelevel" %% "cats-effect" % "3.3.12",
+        "org.typelevel" %% "cats-effect" % "3.3.14",
         "com.chuusai" %% "shapeless" % "2.3.9",
         "io.circe" %% "circe-fs2" % "0.14.0",
         "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M15",
