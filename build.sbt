@@ -45,7 +45,7 @@ lazy val root = (project in file("."))
         "co.fs2" %% "fs2-core" % "3.2.7",
         "org.typelevel" %% "cats-core" % "2.7.0",
         "org.typelevel" %% "cats-effect" % "3.3.12",
-        "com.chuusai" %% "shapeless" % "2.3.9",
+        "com.chuusai" %% "shapeless" % "2.3.10",
         "io.circe" %% "circe-fs2" % "0.14.0",
         "com.dwolla" %% "cloudflare-api-client" % "4.0.0-M15",
         "org.http4s" %% "http4s-ember-client" % "0.23.12",
